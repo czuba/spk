@@ -1,0 +1,1 @@
+function y = mmin(x,x2);% MMIN % mmin(x) computes the minimum of all elements of x, regardless of% dimensionality%% Lawrence K. Cormack%% lkc back/inthe/day  wrote it% lkc 10/Jul/2012 made header commments % tbc 07/Oct/2014 added 2nd input functionalityif nargin==1    y = min(x(:));else    y = min( [x(:); x2(:)] );end
