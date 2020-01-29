@@ -132,6 +132,7 @@ else
     dv = initDaily(baseName, basePath, spkSrc, unitArgs);
 end
 
+% Update this check with the expected PLDAPS calling function name
 if isfield(dv.pds.baseParams.session, 'caller') && ~contains(lower(dv.pds.baseParams.session.caller.name), 'rfpos')
     warning('PDS file generated from:  %s\nThis doesn''t appear to be the correct file type for computing RF position.', dv.pds.baseParams.session.caller.name)
     keyboard
@@ -179,54 +180,54 @@ baseModule = stimType{1};
 % % !!! % % % % %
 
 % -- RF pos XYZ example:
-xyzSize = rate.condDims(1:3);
-
-% Get shared stimulus parameters are from dv.pds.baseParams:
-stimCtr = dv.pds.baseParams.(baseModule).stimCtr;
-gridSz = dv.pds.baseParams.(baseModule).gridSz;
-viewDist = dv.pds.baseParams.display.viewdist;
-
-% *** Tricky/convoluted cellfun call ***
-%  - XY [stimPos] of each condition are stimulus grid offsets from a shared center postion [stimCtr]
-%  - But Z is not transformed by gridSz, instead must pass through and add as offset (stimCtr too) to viewing distance.
-condMat = cellfun(@(x) [([x.stimPos(1:2).*gridSz(1:2), x.stimPos(3)+viewDist]  + stimCtr), x.dir] ...
-        , dv.pds.condMatrix.conditions, 'uni',0);
-
-condSet = cell2mat(condMat(:));
-
-% Stim conditions for ALL strobes (in order of presentation)
-strobeConds = condSet(rate.stimStrobes(:,2),:);
-
-
-% Convert strobe values into x & y indices, while collapsing across any
-% additional condMatrix dimensions (e.g. ori, direction, disparity, etc)
-
-% -- final [~] output from ind2sub captures all additional dimensions
-[xi, yi, zi, oi] = ind2sub(rate.condDims, rate.stimStrobes(:,2));
-[xyzi] = sub2ind([xyzSize], xi, yi, zi);
-
-% Set of unique XY positions, properly sorted
-xyz = condSet(unique(xyzi), 1:3);
-xs = unique(xyz(:,1),'stable'); %xyz(1:rate.condDims(1),1);
-ys = unique(xyz(:,2),'stable'); %xyz(1:rate.condDims(1):end,2);
-zs = unique(xyz(:,3),'stable');
-
-% trial count in each condition
-ntr = reshape(hist(xyzi, length(xyz)), xyzSize);
-[ct tr] = deal(nan([mmax(ntr), xyzSize, nunits]));
-sz = size(ct);
-
-for i = 1:length(xyz)
-    % subscripts for this xyz index
-    [xii, yii, zii] = ind2sub(xyzSize, i);
-    % Logical index of all stimulus presentations matching this xy position
-    ii = xyzi==i;
-    % Tediously ensure we don't mix up unit responses in this reshaping
-    for u = 1:nunits
-        ct(1:ntr(i), xii, yii, zii, u) = rate.count(ii,u);
-        tr(1:ntr(i), xii, yii, zii, u) = rate.raw(ii,u);
-    end
-end
+% % %         xyzSize = rate.condDims(1:3);
+% % % 
+% % %         % Get shared stimulus parameters are from dv.pds.baseParams:
+% % %         stimCtr = dv.pds.baseParams.(baseModule).stimCtr;
+% % %         gridSz = dv.pds.baseParams.(baseModule).gridSz;
+% % %         viewDist = dv.pds.baseParams.display.viewdist;
+% % % 
+% % %         % *** Tricky/convoluted cellfun call ***
+% % %         %  - XY [stimPos] of each condition are stimulus grid offsets from a shared center postion [stimCtr]
+% % %         %  - But Z is not transformed by gridSz, instead must pass through and add as offset (stimCtr too) to viewing distance.
+% % %         condMat = cellfun(@(x) [([x.stimPos(1:2).*gridSz(1:2), x.stimPos(3)+viewDist]  + stimCtr), x.dir] ...
+% % %                 , dv.pds.condMatrix.conditions, 'uni',0);
+% % % 
+% % %         condSet = cell2mat(condMat(:));
+% % % 
+% % %         % Stim conditions for ALL strobes (in order of presentation)
+% % %         strobeConds = condSet(rate.stimStrobes(:,2),:);
+% % % 
+% % % 
+% % %         % Convert strobe values into x & y indices, while collapsing across any
+% % %         % additional condMatrix dimensions (e.g. ori, direction, disparity, etc)
+% % % 
+% % %         % -- final [~] output from ind2sub captures all additional dimensions
+% % %         [xi, yi, zi, oi] = ind2sub(rate.condDims, rate.stimStrobes(:,2));
+% % %         [xyzi] = sub2ind([xyzSize], xi, yi, zi);
+% % % 
+% % %         % Set of unique XY positions, properly sorted
+% % %         xyz = condSet(unique(xyzi), 1:3);
+% % %         xs = unique(xyz(:,1),'stable'); %xyz(1:rate.condDims(1),1);
+% % %         ys = unique(xyz(:,2),'stable'); %xyz(1:rate.condDims(1):end,2);
+% % %         zs = unique(xyz(:,3),'stable');
+% % % 
+% % %         % trial count in each condition
+% % %         ntr = reshape(hist(xyzi, length(xyz)), xyzSize);
+% % %         [ct tr] = deal(nan([mmax(ntr), xyzSize, nunits]));
+% % %         sz = size(ct);
+% % % 
+% % %         for i = 1:length(xyz)
+% % %             % subscripts for this xyz index
+% % %             [xii, yii, zii] = ind2sub(xyzSize, i);
+% % %             % Logical index of all stimulus presentations matching this xy position
+% % %             ii = xyzi==i;
+% % %             % Tediously ensure we don't mix up unit responses in this reshaping
+% % %             for u = 1:nunits
+% % %                 ct(1:ntr(i), xii, yii, zii, u) = rate.count(ii,u);
+% % %                 tr(1:ntr(i), xii, yii, zii, u) = rate.raw(ii,u);
+% % %             end
+% % %         end
 
 
 % Compile the outputs
@@ -281,15 +282,16 @@ dv.examp.fxn = fxn;
 dv.examp.fxnPars = {'base', 'amp', 'xmu', 'ymu', 'sigma'};
 dv.examp.fit = dummyfit; % nUnit-by-nParams fitted outputs
 
-% Easily plot fitted results using the function handle
-u = 1;
-[xx,yy] = meshgrid(-5:.5:20, 5:-.5:-20);
-
-fitout = dv.examp.fxn( dv.examp.fit(u,:), {xx,yy});
-figure;
-surf(xx,yy,fitout);
-view(2); axis image;
-
+if 0
+    % Easily plot fitted results using the function handle
+    u = 1;
+    [xx,yy] = meshgrid(-5:.5:20, 5:-.5:-20);
+    
+    fitout = dv.examp.fxn( dv.examp.fit(u,:), {xx,yy});
+    figure;
+    surf(xx,yy,fitout);
+    view(2); axis image;
+end
 % % % % % % % % % % % %
 % % % % % % % % % % % %
 
