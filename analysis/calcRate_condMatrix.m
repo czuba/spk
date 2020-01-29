@@ -1,4 +1,26 @@
 function [rate] = calcRate_condMatrix(spkSrc, pds, late, syncID)  %, baseWin, expo)
+% function [rate] = calcRate_condMatrix(spkSrc, pds, late, syncID)  %, baseWin, expo)
+% 
+% Compute spike [rate] struct on a given [spkSrc] struct (i.e. dv.uprb) based on
+% the [pds] PLDAPS stimulus struct.
+% 
+% Optional inputs:
+%   [late]      latency windows (can be series of n-by-2 start & end times relative to sync)
+%               defaults to stimulus duration
+%   [syncID]    Best unused for now...use fields of rate struct ot parse after-the-fact
+% 
+% OUTPUTS:
+%   [rate]  standardized czuba-struct of 
+% 
+% 
+% NOTE:  Syncs aren't sent till a matrix stimulus OFFSET!
+%   This is by design (...for better or worse) because that way only completed presentations produce a sync.
+%   However, this means response windows must be definied relative to the OFFSET TIMESTAMP.
+% 
+% 
+% 2020-01-29  TBC  Commenting. Needs clean-up, but 'just works' for now
+% 
+
 
 if ~exist('late','var') || isempty(late)
     % DEFAULT: full duration that matrix stimulus module(s) were active
@@ -15,14 +37,11 @@ elseif islogical(syncID)
     syncID = find(syncID);
 end
 
-% % if ~exist('baseWin','var') || isempty('baseWin')
-% %     baseWin = [late, trialdur];
-% % end
 
-%% Get Array spike data
+%% Get spike data
 
 syncs = spkSrc.sync.strobe(:,1);
-rate.id  = spkSrc.id;   %sum(unique(spikes(spikes(:,1)~=0,1:2),'rows') * [10;1], 2);
+rate.id  = spkSrc.id;
 rate.snr    = spkSrc.snr;
 
 
@@ -36,17 +55,11 @@ end
 stimStrobes = spkSrc.sync.strobe(stimPass, :); %...prob unused
 stimStrobes(:,2) = stimStrobes(:,2)-baseIndex;
 
-% % % if ~isempty(syncID)
-% % %     % only include [syncID] conditions
-% % %     ii = ismember(stimStrobes(:,2), syncID);
-% % %     stimStrobes = stimStrobes(ii,:);
-% % % %     stimPass = stimPass(ii);
-% % % end
     
 % condMatrix stim duration IN SECONDS
 tdur = double(diff(pds.baseParams.(pds.condMatrix.modNames.matrixModule{1}).modOnDur));
     % This looks convoluted, but just takes diff of onset & offset time from first matrixModule.
-    % --!!-- Assumes duration of all modules are the same...they SHOULD be, but maybe kinda risky
+    % --!!-- Assumes duration of all modules are the same...
 
 % Response latency IN SECONDS
 if isfield(spkSrc,'respLatency')

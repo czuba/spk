@@ -1,13 +1,22 @@
 function dv = initDaily(baseName, basePath, spkSrc, unitArgs)
+% function dv = initDaily(baseName, basePath, spkSrc, unitArgs)
+% 
 % Initialize structure & file paths for daily recording files with--unit ordered--cell array style spike structures
 % and parallel toolbox for loading of spike data.
 %   (based on code infrastructure written by T.Czuba at Einstein, 2012-2016)
 % 
-%       Array data and thomas tetrode data now referred to as "arr" and "tom"
-%           (instead of "nev" and "plx" since file type is no longer exclusive)
-%       ? Should a spkSrc distinction be made for uprobe data recorded on MAP system vs Omniplex?
+% 2020-01:  Help & comment text of this file is way out of date...generally:
+%     [dv] struct is the primary data variables output struct for all Czuba analysis code.
+%     -- This struct syncs and pairs together data paths, stimulus, spike, and info structures in a standardized Czuba-format
+%     -- initDaily.m is the catch-all function for initializing a dv struct
+%     -- Primary subfields:
+%       .paths  Struct of all the full paths to source files
+%       .pds    PLDAPS stimulus & recording session data structure
+%       .info   High-level info, more detail in each substruct .info
+%       .uprb   Spike data. **Currently only the uprobe [.uprb] branch is really coded, but tried to maintain
+%               flexibility of original structures I built for both Utah array [.arr] and Thomas tetrode [.tom] data
 % 
-%       Data structure formatted as:
+%       Spike data structure formatted as:
 %           id:     unit id (chan*10 + unit#)
 %           ts:     timestamp cell (nUnits x 1; in msec)
 %           sync:   sync times  (in msec)
@@ -16,8 +25,17 @@ function dv = initDaily(baseName, basePath, spkSrc, unitArgs)
 %                   * can also request to have .all field with all waveforms...will make file huge & not recommended
 %           n:      nSpikes per unit (nUnits x 1)
 % 
-% ....updating in progress Sept. 2014. Working with just array data [arr], so code to get data from thomas system [tom]
-%     (e.g. tetrodes) is not yet updated.
+% Typically a session will consist of multiple [dv] structs, one for each RF/tuning analysis component.
+%   -- In .mat data files, these are delineated by suffix on the 'dv', as in:  dvRf, dvT[une], dvD[isparity],...etc
+%   -- dv_output.mat files are a single data file containing multiple dv structs,
+%      and ideally the output table from >> tt = scanSesh; containing info about each PLDAPS file in that session
+% 
+% 
+% See also: initDaily, scanSesh, syncPlexon2PDS, plx_readerPar_Pldaps, figureFS, getKiloPath, getSpikes_kilo
+% 
+% 201x-xx-xx  TBC  Wrote it for ephys analysis
+% 2020-01-29  TBC  Cleaned & commented [somewhat] last few years of dev into PLDAPS compatibility
+
 
 %% Parse inputs
 
@@ -193,7 +211,7 @@ for ss = 1:length(spkSrc)
     end
     
     if isnumeric(unitArgs)
-        modeStr = sprintf('mode%d', unitArgs(1));
+        modeStr = [sprintf('mode%d', unitArgs(1)), sprintf('-%d',unitArgs(2))];
     else
         modeStr = sprintf('mode-%s', unitArgs(1));
     end

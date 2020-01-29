@@ -5,7 +5,7 @@
 
 % prevent runaway KbQueue 
 try
-    KbQueueStop;
+    KbQueueRelease; %KbQueueStop;
 end
 
 clear all;

@@ -1,26 +1,56 @@
-function [dv, Hout] = rfPosAwake3d(baseName, unitArgs, addto, doFitting)
-% function [dv, Hout] = rfPosAwake(baseName, unitArgs, addto, doFitting)
+function [dv, Hout] = rfPosAwake3d(baseName, unitArgs, addto, doFitting, varargin)
+% function [dv, Hout] = rfPosAwake3d(baseName, unitArgs, addto, doFitting, ['param1',val1, 'param2',val2, ...])
+% 
+% Inputs are getting super gangly...
+% 
+% INPUTS:
+%   [baseName]  =   String containing a [unique] portion of PDS file name you'd like to process
+%                   -- the last 4-digit number in PLDAPS file name (experiment start time) is good
+%                   -- Also accepts a cell of {name, path} for calling from another location (i.e. pwd ~= recording session directory)
+%   [unitArgs]  =   Flags controlling how/what spike data is loaded (see below)
+%   [addto]     =   Figure number to use: if exist, will add to that figure, if not, will create new figure with that number
+%   [doFitting] =   Fit circular gaussians [true]
+%   PV-pairs    =   Parameter value pairs [...not yet implemented]
+% 
+% OUTPUTS:
+%   [dv] struct is the primary data variables output struct for all Czuba analysis code.
+%   -- This struct syncs and pairs together data paths, stimulus, spike, and info structures in a standardized Czuba-format
+%   -- initDaily.m is the catchall function for initializing a dv struct
+% 
 % 
 % Suggested usage:
 %   dvRf = rfPosAwake3d('1527', [-666, 1], -1)
 %   -- '1527'       is the timestamp of PDS file interested in (e.g. <file>_1527.PDS)
 %   -- [-666, 1]    [-666] will collapse all units, negative forces use of unsorted spike source file
 %                   [1]    will load waveform means & ci for each unit
-%   -- -1           plotting flag: negative triggers new figure to be used, positive will use that figure number
+%   -- -1           plotting flag: negative triggers new figure to be used; positive will use that figure number, if it already
+%                   exists it will attempt to add new plots to existing axes based on axis tags (expert mode; YMMV)
 %                   addto>0 mostly for plotting multiple rfPosition files in same figure (e.g. different eye or region)
 % 
 % 
 %   [unitArgs] flag options  (...hackily complex, but is what it is)
 %       default: [666, 0]  Loads all spikes (including unsorted), no waveforms;
 %       arg(1) == 0:    All sorted & unsorted spikes
-%       arg(1) == 1:    Ignore unsorted spikes (PLX sortcode == 0)
-%       arg(1) == 666:  Collapse all spike sort codes
-%                           (good for ignoring junk units created during recording)
-%       arg(2) == 0:    Dont get waveforms.
-%       arg(2) == 1:    Load waveforms, but only pass out wf mean & ci of each unit
+%       arg(1) == 1:    Ignore unsorted spikes (don't load PLX sortcode == 0)
+%       arg(1) == 666:  Collapse all spike sort codes  (default; good for ignoring junk units created during recording)
+%       arg(2) == 0:    Dont load waveforms. (default)
+%       arg(2) == 1:    Load waveforms, but only pass out wf mean & ci of each unit (default)
 %       arg(2) == 2:    Load waveforms, pass out wf mean, ci, & every individual wf (this will be big!)
 %       arg(2) == 3;    Load waveforms, pass out wf mean & means from 4 temporal intervals across file
-%                           (good for coarse stability check)
+%                       (good for coarse stability check)
+% 
+% See also: initDaily, syncPlexon2PDS, calcRate_condMatrix, figureFS,
+%           plx_readerPar_Pldaps, getKiloPath, getSpikes_kilo
+% 
+% 201x-xx-xx  TBC  Evolved over years from acute to awake experiments, and beyond
+% 2020-01-29  TBC  Cleaning & commenting. Add record of calling string in output figure.UserData (see end of code)
+% 
+
+%  TODO:
+%   parameter-value pairs & defaults:
+%   'spx'       = n subplot columns     [2]
+%   'spy'       = n subplot rows        [nunits/spx]
+%   
 
 
 %% Default inputs
@@ -52,6 +82,9 @@ else
     basePath = pwd;
 end
 
+%** This relies on defarg.m; an ancient piece of code for checking/setting default values.
+%   Its "just don't look" code that isn't broke, so... --TBC 2020-01
+
 % spikes to load/use
 defarg('unitArgs', [666, 0]); % Default:  666=load all spikes, collapse all sorted & unsorted
 
@@ -69,13 +102,23 @@ elseif ~doFitting && ~isstruct(baseName)
     doFitting = 1;
 end
 
+% TODO:  Parse additional PV-pair inputs
 
 if ~exist('spkSrc','var')
     spkSrc = cellstr('uprb');
     %spkSrc = {'uprb'};
 end
 
-%% Load the files
+%% Load the files:  create [dv] struct
+% % [dv] struct is the primary data variables output struct for all Czuba analysis code.
+% % -- This struct syncs and pairs together data paths, stimulus, spike, and info structures in a standardized Czuba-format
+% % -- initDaily.m is the catchall function for initializing a dv struct
+% % 
+% % Typically a session will consist of multiple [dv] structs, one for each RF/tuning analysis component.
+% % -- In .mat data files, these are delineated by suffix on the 'dv', as in:  dvRf, dvT[une], dvD[isparity],...etc
+% % -- dv_output.mat files are a single data file containing multiple dv structs,
+% %    and ideally the output table from >> tt = scanSesh; containing info about each PLDAPS file in that session
+% % 
 if isstruct(baseName)
     % first input was existing dv struct, not baseName string
     dv = baseName;
@@ -110,7 +153,7 @@ nunits = size(rate.count,2);
 % baseModule = dv.pds.condMatrix.modNames.currentStim{1};
 
 % Type of RF mapping stimulus used (e.g. 'gabors' or 'dotBall')
-stimType = dv.info.stimType;%{baseModule, dv.pds.baseParams.session.caller.name};
+stimType = dv.info.stimType;
 baseModule = stimType{1};
 
 % ...here we go.
@@ -121,8 +164,10 @@ switch stimType{1}
     case 'gabors'
         doYflip = [1,-1]; % flip y-dimension when rendering texture stimuli
         %*** (...fix this in stim code to make universally 'correct': negative below horizontal meridian)
+        % ...done, I think, but hardly ever use gabor rf pos anymore, since 3Ddots so much better
         condMat = cellfun(@(x) [(x.stimPos(1:2).*dv.pds.baseParams.(baseModule).gridSz(1:2) + dv.pds.baseParams.(baseModule).stimCtr(1:2)).*doYflip, x.dir] ...
             , dv.pds.condMatrix.conditions, 'uni',0);
+        
     case 'dotBall'
         stimCtr = dv.pds.baseParams.(baseModule).stimCtr;
         gridSz = dv.pds.baseParams.(baseModule).gridSz;
@@ -163,7 +208,6 @@ zs = unique(xyz(:,3),'stable');
 
 % trial count in each condition
 ntr = reshape(hist(xyzi, length(xyz)), xyzSize);
-% [ct tr] = deal(nan([mmax(ntr), nunits, xySize]));
 [ct tr] = deal(nan([mmax(ntr), xyzSize, nunits]));
 sz = size(ct);
 
@@ -215,9 +259,10 @@ dv.rf.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
 
 % Subplot size & layout
 spbase = 0;
-spx = 2;
-spy = nunits/spx;
-% % !! %   spx == 2 makes subplots match stereo-probe config
+spx = 8;%2;
+% % !! %   spx == 2 on unsorted data makes two subplot columns, matching unsorted stereo-probe channel config
+% % !! %   ...but resulting fig is not really viewable until after saving to [pdf/png/eps] file
+spy = ceil(nunits/spx);
 
 % Double column (native stereo-probe config)
 figW = 8;
@@ -227,42 +272,24 @@ figsz = [figW, nunits/spx*figHscale];%nunits*figWscale, figHeight];
 spMargin = [.03 .025]; % spMargin = [.015 .015];    % spMargin = .3/nunits .* [1 1];
 
 
-if isempty(addto) || addto<0
-    % Open new figure
-    H1 = figureFS([], 'portrait', figsz);
-    set(H1, 'name', ['v',fileName,'_rf'], 'tag',figDir)
+% Crufty flag trying to do too much...[new figure, choose number, existing figure,...lots of edge cases]
+if isempty(addto) || ~ishandle(addto)
+    if ~isempty(addto) && isnumeric(addto)
+        % Use [addto] as figure number
+        if addto<0 && ishandle(abs(addto))
+            close(abs(addto));
+        end
+        H1 = figureFS(abs(addto), 'portrait', figsz);
+    else
+        % Open new figure
+        H1 = figureFS([], 'portrait', figsz);
+    end
+    % name it
+    set(H1, 'name', [fileName,'_rf'], 'tag',figDir)
 else
-    % 3rd argin is handle to figure
+    % 3rd argin is handle to existing figure
     H1 = addto;
 end
-
-
-%% Coarse tuning from RF mapping responses
-% %NOTE: This is rarely still used, but good to have around if need [extra] fast & dirty metric to constrain tuning params o.t.f.
-
-% get the first linear index of each dimension beyond XYZ conditions   (...cryptic, but should be robust to nDimensions)
-%   [oi] are stim presentation indices for condition dimensions beyond XYZ
-oth = unique(oi);
-iOthers = sub2ind(rate.condDims, ones(size(oth)), ones(size(oth)), ones(size(oth)), oth);
-dv.rf.oris = condSet(iOthers, 4:end);
-oriTi = oi;  % ...just here to match old code
-
-% just the frontoparallel directions
-switch stimType{1}
-    case 'gabors'
-        
-    case 'dotBall'
-        % this stim defined by [xyz direction, motion plane rotation]     (e.g. XZ plane is XY plane rotated by 90)
-        jnk = find(dv.rf.oris(:,2)==0);
-        theseOi = ismember(oi, jnk);
-        theseOris = dv.rf.oris(jnk,:);
-end
-
-ttmp = []; %#ok<*AGROW> %nan(length(dv.rf.oris), nunits); 
-if addto>=0
-    coarseTuningSubFunction;
-end
-
 
 
 %%  Fit 2d rfs
@@ -406,7 +433,7 @@ ha = findobj(H1, 'type','axes');
 
 for u = 1:nunits,
 
-    if isempty(addto) || addto<0        
+    if isempty(addto) || addto<0 || isempty(ha)
         sp = subplot_tight(spy, spx, u+spbase, spMargin);
         % tag as channel RF
         set(sp, 'tag',sprintf('ch%drf',u), 'NextPlot','add');
@@ -421,7 +448,7 @@ for u = 1:nunits,
         imU = dv.rf.trMu(:,:, u)';
     elseif ndims(dv.rf.trMu)==4
         % xyz, collapse z
-        imU = dv.rf.trMu(:,:, :, u);%nanmean(dv.rf.trMu(:,:, :, u), 3)';
+        imU = dv.rf.trMu(:,:, :, u);
     else
         error('rfPosAwake3:badDimensions','Unrecognized RF response matrix dimensions:\t%s\n\t%s', mat2str(size(dv.rf.trMu)), dv.paths.pds)
     end
@@ -466,7 +493,6 @@ for u = 1:nunits,
                 end
                 % common color range
                 icl = prctile(dv.rf.rate.raw(:,u), [5,95], 'all');
-                %             icl = [0, .95*max(dv.rf.rate.raw(:,u), [], 'all')];
                 if diff(icl)<1, icl = [0,1]; end
                 
                 figureFS(rfTabs(u), 'portrait',[6,4]);  % (u+100);
@@ -475,7 +501,7 @@ for u = 1:nunits,
                 for d = 1:length(ud)
                     % just this depth
                     ii = uii==d;
-%                     F = scatteredInterpolant(rawPos(ii,1), rawPos(ii,2), dv.rf.rate.raw(ii,u), 'natural');
+                    %  F = scatteredInterpolant(rawPos(ii,1), rawPos(ii,2), dv.rf.rate.raw(ii,u), 'natural');
                     rrd = trMu{u}(:,:,d); rrdn = numel(rrd);
                     F = griddedInterpolant( reshape(xyzMat(1:rrdn,1),size(rrd)), reshape(xyzMat(1:rrdn,2),size(rrd)), rrd, 'makima');
                     % Get interpolated response surface
@@ -487,7 +513,7 @@ for u = 1:nunits,
                     view(2); axis tight equal, % axis(rfAxLims)
                     title(sprintf('u%d VD=%2.2fcm',u, dv.rf.zs(d)));
                 end
-%                 pause(.01) % pause is faster than processing lag (???)
+                %             pause(.01) % pause is faster than processing lag (???)
                 %             linkprop(di,{'CLim','View'});  %...doesn't work inside loop(?!?)
                 icl = cell2mat(get(di, 'clim'));
                 icl = [min(icl(:,1)), max(icl(:,2))];
@@ -516,10 +542,6 @@ for u = 1:nunits,
         end
         warning(warnbak);
 
-        % %     %     F = griddedInterpolant(reshape(dv.rf.xyz(:,1), size(V)), reshape(dv.rf.xyz(:,2), size(V)), V, 'makima');%   , reshape(dv.rf.xyz(:,3), size(V)), V, 'makima');
-        % %     %     [xx, yy] = ndgrid(linspace(gl(1,1), gl(2,1),rez), linspace(gl(1,2), gl(2,2),rez)); % zz = 0*ones(size(xx));
-        % %     %     Vi = F(xx,yy);  %,zz);
-        % %     %     hh = surf(xx',yy',Vi,'linestyle','none', 'FaceColor','interp'); view(2); axis tight equal, axis(rfAxLims)
     else
         % Plot rf image map
         if ndims(imU)==2
@@ -538,9 +560,7 @@ for u = 1:nunits,
                 if ~exist('rfTabs', 'var')
                     rfTabs = mkFigureTabs( (1:nunits)+100, dv.info.pdsName);
                 end
-                figure(rfTabs(u));  % (u+100);
-                %icl = prctile(imU, [1,99], 'all');
-                %if diff(icl)<1, icl = [0,1]; end
+                figure(rfTabs(u));
                 for i = 1:length(dv.rf.zs)
                     di(i) = subplot_tight(1, length(dv.rf.zs), i, .07);
                     imagesc(gl(:,1), gl(:,2), imU(:,:,i)');
@@ -598,67 +618,41 @@ for u = 1:nunits,
     fprintf('.')
 end
 fprintf('\n')
-
+    
 drawnow
+
+Hagg = scratch_plotRf_agg(dv);
 
 if nargout>1
     % output figure handles
-    Hout = [H1];
+    Hout = [H1, Hagg];
     if exist('rfTabs', 'var')
         Hout = [Hout, rfTabs];
     end
 end
 
 
+% Record calling command in UserData
+% HACKY:  only command line calls for now
+dbSt = dbstack;
+if numel(dbSt)==1
+    try
+        % Get session history from Java object, convert to cell string:
+        historyText = cellstr(char(com.mathworks.mlservices.MLCommandHistoryServices.getSessionHistory));
+        % Extract last string:
+        callingStr = historyText{end};
+        % Only continue if contains this file name
+        if contains(callingStr, mfilename)
+            set(H1, 'UserData', callingStr)
+        end
+    end
+end
+
 
 
 % % % % % % % % % %
 %% Nested Functions for gangly code snippets
 % % % % % % % % % %
-
-
-    function coarseTuningSubFunction
-        fprintf('Plotting coarse polar tuning')
-        figure;
-        trMx = bsxfun(@rdivide, dv.rf.trMu, max(max(dv.rf.trMu )));
-        rateCut = 3/4;
-
-        for ch = 1:nunits
-            % find all stim locations where response exceeds rate cutoff
-            ii = ismember(xyzi, find( trMx(:,:,ch) >= rateCut ));
-            % further limit to a subset of orientations
-            ii = ii & theseOi;
-            [db, dp, ob, op] = orivecfit(theseOris(oi(ii), 1), rate.raw(ii,ch));  %orivecfit(expodata(ii,2), rate.raw(ii,ch));
-
-            for o = 1:length(dv.rf.oris)
-                % ori means without diluting by all non responsive stim locations
-                ttmp(o,ch) = rms(rate.raw(oriTi==o & ii,ch));
-            end
-            dv.rf.tunetr{ch} = find(ii);
-            dv.rf.tune = ttmp;
-            dv.rf.ori(:,ch) = [op, ob];
-            dv.rf.dir(:,ch) = [dp, db];
-
-            subplot_tight(4,ceil(nunits/8), ch, spMargin, 'plotboxaspectratio',[3,2,1])
-
-            polarplot(d2r(theseOris(oi(ii), 1)), rate.raw(ii,ch), '*');
-            hp = gca;
-            rticks = unique(round2(mmax(rate.raw(ii,ch))*[0.5,1], 5));
-            set(hp, 'ThetaTick',[0:45:360], 'RTick', rticks);
-
-            title(sprintf('ch.%g\nO(%2.0f, %1.2f)   D(%2.0f, %1.2f)', dv.uprb.id(ch), dv.rf.ori(:,ch), dv.rf.dir(:,ch)), 'fontsize',11, 'fontweight','normal');
-
-            % progress
-            fprintf('.')
-        end
-        fprintf('\n')
-        % back to primary output figure
-        figure(H1)
-    end
-
-end %main function
-
-
 
 
 
