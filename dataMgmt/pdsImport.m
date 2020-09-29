@@ -1,4 +1,4 @@
-function [pds, pdsPath] = pdsImport(filename, theseFields)
+function [pds, pdsPath] = pdsImport(filename, theseFields, verbosity)
 % function pds = pdsImport(filename, theseFields)
 % 
 % Make loading .PDS data files (from PLDAPS) more robust & user friendly.
@@ -27,6 +27,9 @@ end
 
 if nargin <2
     theseFields = [];
+end
+if nargin <3 || isempty(verbosity)
+    verbosity = 1;
 end
 
 if isfolder(filename)
@@ -78,23 +81,37 @@ if ~isempty(fd)
             % use pre-compiled data struct
             % ...this method not really fully coded, but might "just work"
             thisfile = fullfile(pdsPath, [fd.name(1:end-3),'mat']);
-            fprintf('Loading pre-compiled analysis struct:\n\t%s\n', thisfile);
+            if verbosity
+                fprintf('Loading pre-compiled analysis struct:\n\t%s\n', thisfile);
+            end
             pds = load( thisfile );
             
         case 'pds'
             % load PDS struct
             pdsPath = fullfile(pdsPath, fd.name);
-            fprintf('Loading PDS file:\n\t%s\n', pdsPath);
+            if verbosity
+                fprintf('Loading PDS file:\n\t%s\n', pdsPath);
+            end
             
             % Must be modern PDS file (>=glDraw branch). Damn the torpedos!!
             if isempty(theseFields)
                 pds = load(pdsPath, '-mat');
+                if length(fieldnames(pds))==1
+                    % likely temp file or not saved correctly...try unpacking
+                    fn = fieldnames(pds);
+                    pds = pds.(fn{1});
+                end
             else
                 pds = load(pdsPath, '-mat', theseFields);
             end
             
-%             try
+            try
                 % PDS stimulus file info
+                if isfield(pds,'info')
+                    info = pds.info;
+                else
+                    info = struct;
+                end
                 [~, info.pdsName] = fileparts(pds.baseParams.session.file);
                 
                 info.stimType = {pds.baseParams.pldaps.modNames.currentStim{1}, pds.baseParams.session.caller.name};
@@ -151,11 +168,12 @@ if ~isempty(fd)
                             end
                     end
                 end
-                
-                pds.info = info;
-%             end
-
-            fprintf('\tDone.\n')
+            end
+            pds.info = info;
+            
+            if verbosity
+                fprintf('\tDone.\n')
+            end
     end
     
 end

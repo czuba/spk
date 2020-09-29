@@ -59,7 +59,7 @@ useTrialAverages = 1;
 % plot interpolant surface, or basic response image?
 plotInterpolant = 1; 
 
-% cd ~/spkLocal/kipp; %/Volumes/Tank1/projectData/adaptDist/awake/axel/data
+
 if evalin('caller', sprintf('exist(''figDir'',''var'') && ~isempty(figDir)'))
     figDir = evalin('caller', 'figDir')     %#ok<*NOPRT>
 end
@@ -264,10 +264,13 @@ spx = 8;%2;
 % % !! %   ...but resulting fig is not really viewable until after saving to [pdf/png/eps] file
 spy = ceil(nunits/spx);
 
-% Double column (native stereo-probe config)
-figW = 8;
-figHscale = 3;
-figsz = [figW, nunits/spx*figHscale];%nunits*figWscale, figHeight];
+% % Double column (native stereo-probe config)
+% figW = 8;
+% figHscale = 3;
+% figsz = [figW, nunits/spx*figHscale];%nunits*figWscale, figHeight];
+figHeight = 4*spy;
+figWidth = 2+3*spx;
+figsz = [figWidth, figHeight];
 
 spMargin = [.03 .025]; % spMargin = [.015 .015];    % spMargin = .3/nunits .* [1 1];
 
@@ -586,24 +589,22 @@ for u = 1:nunits,
         contour(xxRF, yyRF, reshape(fout, size(xxRF)), [1,1]*rf50, 'color','k','linestyle',':', 'xliminclude','off', 'yliminclude','off');
     end
 
-    xlabel(sp, sprintf('ch.%g\n(%4.1f, %4.1f), %4.1f',  dv.uprb.id(u), dv.rf.fit(u,3:4), 2.355*sqrt(dv.rf.fit(u,5))), 'fontsize',10);
+    xlabel(sp, sprintf('ch %.2f\n(%4.1f, %4.1f), %4.1f',  dv.uprb.id(u), dv.rf.fit(u,3:4), 2.355*sqrt(dv.rf.fit(u,5))), 'fontsize',10);
 
     if u==1
         % full title on first plot only
         titext = {sprintf('%s  VD:%d ', dv.info.pdsName, dv.info.viewDist), [dv.info.stimType{2},' || ',dv.uprb.info.comment]}; %#ok<*AGROW>};
-        tialign = 'left';
-        ht = title(sp, titext, 'fontsize',10, 'interpreter','none', 'horizontalalignment',tialign);
+        ht = title(sp, titext, 'fontsize',10, 'interpreter','none');
         if nunits>=2
-            set(ht,'horizontalalignment','center'),
-        else,
-            set(ht,'horizontalalignment','center'),
+            tialign = 'left';
+        else
+            tialign = 'center';
         end
+        set(ht,'horizontalalignment','center')
+
     elseif u==nunits
         % add stim location grid to last image
         plot(sp, dv.rf.xyz(:,1), dv.rf.xyz(:,2), '.','color',.97*[1 1 1], 'markersize',2)
-        %         % rf stim locations with drive>=cutoff (~33%)
-        %         ii = unique(xyi(dv.rf.tunetr{u}));
-        %         plot(sp, dv.rf.xyz(ii,1), dv.rf.xyz(ii,2), '.','color',.97*[1 1 1], 'markersize',2)
     end
     
     

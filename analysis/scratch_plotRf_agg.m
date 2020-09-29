@@ -122,13 +122,19 @@ tkl = [""    "-30"    ""    "-20"    ""    "-10"    ""    "0"    ""    "10"    "
 set(gca, 'fontsize',fsz*1.5)
 
 % Unit numbers
-nL = [1,8:8:32];
-noff = 0.6;
-% fsz = 18;
-for u = nL%1:nunits
-    plot( rfx(u)*[1 1], rfy(u)*[1 1]+[0,noff], '-k', 'linewidth',1.32);
-    ht = text(rfx(u), rfy(u)+noff+.1, num2str(u));    %sprintf('%2.1f',rfDepth(u)));
-    set(ht, 'fontweight','bold', 'horizontalalignment','center',  'fontsize',fsz*1.5, 'verticalalignment','baseline', 'color',.02*[1 1 1])
+try
+    % only if unsorted (too much variance on sorted to be helpful)
+    if nunits==dv.uprb.info.rawInfo.nChannels
+        nL = [1,8:8:32];
+        
+        noff = 0.6;
+        % fsz = 18;
+        for u = nL%1:nunits
+            plot( rfx(u)*[1 1], rfy(u)*[1 1]+[0,noff], '-k', 'linewidth',1.32);
+            ht = text(rfx(u), rfy(u)+noff+.1, num2str(u));    %sprintf('%2.1f',rfDepth(u)));
+            set(ht, 'fontweight','bold', 'horizontalalignment','center',  'fontsize',fsz*1.5, 'verticalalignment','baseline', 'color',.02*[1 1 1])
+        end
+    end
 end
 
 % axis(aa)

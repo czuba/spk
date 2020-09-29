@@ -136,7 +136,8 @@ if filetypes.eps
 end
 
 % Tell em what you did
-fprintf(2, '#')%'\b\tSaved to: %s\n ', figDir);
+% fprintf(2, '#')%
+fprintf(2, '\b\tSaved to: %s\n ', figDir);
 
 
 % % % 

@@ -22,7 +22,8 @@ if nargin>=1 && isstruct(sync)
     dosync = true;
     plxInfo = sync.info;
     % Sets range of spikes to include in output
-    tsSyncLimSecs = [mmin(sync.plxTrialTs), mmax(sync.plxTrialTs)] + [-1 120];
+    plxTrialTsSec = sync.ptb2plx(sync.plxTrialTs); %convert PLDAPS synced trial times to acquisition system time ('ptb'==psychtoolbox, 'plx'==plexon)
+    tsSyncLimSecs = [mmin(plxTrialTsSec), mmax(plxTrialTsSec)] + [-1 120];
 else
     dosync = false;
     %     fprintf('\tGetting plx file info...\n')
@@ -30,16 +31,20 @@ else
     sync = [];
 end
 
+
 %% Kilosort info
 % initial params
 kiloInfo = loadParamsPy( fullfile(kilopath, 'params.py'));
 % channel map (incl spatial coords of recording device)
 kiloInfo.chanMap = load(fullfile(kilopath, 'chanMap.mat'));
 % raw dat file info
-kiloInfo.rawFile = fullfile(kilopath, kiloInfo.dat_path(1:end-4));   % TODO: use as destination for preprocessed [wf] struct
-
+kiloInfo.rawFile = fullfile(kilopath, kiloInfo.dat_path);   % TODO: use as destination for preprocessed [wf] struct
+if ~exist(kiloInfo.rawFile, 'file')
+    % try to prepend raw file location in standard hierarchy
+    kiloInfo.rawFile = fullfile(kilopath, '..','..','raw',kiloInfo.dat_path);
+end
 % Load rawInfo file (created by czuba fork of Kilosort setup)
-rawInfo = [kiloInfo.rawFile,'_rawInfo.mat'];
+rawInfo = [kiloInfo.rawFile(1:end-4),'_rawInfo.mat'];
 if exist(rawInfo, 'file')
     rawInfo = load(rawInfo);
 else
@@ -56,18 +61,18 @@ end
 
 
 %% Get Kilosort spike data
-
 % load all spike times (in samples)
 tsIdx = double(readNPY( fullfile(kilopath, 'spike_times.npy')));
 
 % get template Id of each spike time
 %   (this is a ZERO-based index to the cluster templates; **ADD 1** to make ONE-based!)
-if exist('spike_clusters.npy','file')
+if exist(fullfile(kilopath, 'spike_clusters.npy'),'file')
     idSrc = 'spike_clusters.npy'; % only exists if manual curation performed
 else
     idSrc = 'spike_templates.npy'; % initial unit outputs from kilosort
 end
 spikeId = double(readNPY( fullfile(kilopath, idSrc)));
+
 
 %% Load Sort IDs (Nested Function)
 % sortId == label given to cluster group during sorting
@@ -77,6 +82,7 @@ spikeId = double(readNPY( fullfile(kilopath, idSrc)));
 %   0=unsorted, 1=good, 2=mua, 3+=userAlphabetical,  ...-1=noise?
 
 spk.sortId = loadSortIds;% ({'noise','good'});
+
 
 %% Format and trim
 
@@ -95,6 +101,7 @@ tsIdx = accumarray(spikeId, tsIdx, [], @(v) {v});    % tsIdx = {nUnits, 1}(nspik
 % accumarray.m does not maintain order(see doc); sort outputs rather than risk misassignment of inputs
 tsIdx = cellfun(@sort, tsIdx, 'uni',0);
 
+
 %% Initial depth ordering (Hacky)
 % Estimate depth of each unit based on mean waveform amplitude (adapted from github/cortex-lab/spikes, templatePositionsAmplitudes.m)
 % ...inefficient, but better than waiting till later and needing to reorder mmany more fields derived from
@@ -103,65 +110,25 @@ fprintf('Initial recording depth estimates...\n')
 % SubFunction:  Load a few thousand waveforms and use them to generate index sorted by depth of peak amplitude
 [tsIdx, depthEst, depthOrder] = sortByDepth(tsIdx, kilopath, kiloInfo.chanMap);
 
-% apply depth ordering to [sortId]
+% apply depth ordering to [sortId] (Kilosort generated)
 spk.sortId = spk.sortId(depthOrder,:);
 [~, nearestChan] = min(abs(depthEst-kiloInfo.chanMap.ycoords')');
-spk.id = nearestChan(:); % replacement/placeholder for former .id == (10*channel# + unit#);
-spk.id = cell2mat(spk.sortId(:,3)); % ...not super human-relevant, but 
+% spk.id = nearestChan(:); % replacement/placeholder for former .id == (10*channel# + unit#);
+% spk.id = cell2mat(spk.sortId(:,3)); % ...not super human-relevant, but 
+
+spk.info = kiloInfo;
+spk.sync = sync;
 
 % strip out anything before sync trial start or more than a 2 minutes after last trial sync end.
 % ...this could backfire, for some future extreme case.       --TBC Sept, 2014 --TBC, again in 2019
+
+
 %%
 if dosync
+    % limit spike times to duration of experimental file (defined in .sync struct)
     tsSyncLimSamples = tsSyncLimSecs .* kiloInfo.sample_rate;
     tsIdx = cellfun( @(x) x(x>=tsSyncLimSamples(1) & x<=tsSyncLimSamples(end)), tsIdx, 'UniformOutput',0);
 end
-
-% Convert tsIdx from counts to seconds;   ts = {nUnits, 1}(nspikes,1))
-spk.ts = cellfun(@(x) x./kiloInfo.sample_rate, tsIdx, 'uni',0);   % ...NOTE: we still need tsIdx to load waveforms below
-
-
-%% Sync spikes with stimulus time
-% Conversion functions are included in the .sync struct
-%   -These aren't necessarily used if analysis all done relative to event syncs, but good to have around --TBC 2019
-
-
-%% Compile output struct
-% spike count for each unit
-spk.n = cellfun(@length, spk.ts);
-
-spk.sync = sync;
-spk.snr = []; % TODO...--TBC 2019
-spk.info = kiloInfo;
-
-
-%%
-% % %     % Condition spike timestamps:
-% % %     %   1) add time delay to align array sync signal with expo presentation
-% % %     %   2) multiply by sampling rate to convert from seconds to milliseconds
-% % %     %   3) round
-% % %     %   4) convert to unsigned 32bit integer to save memory
-% % %     arraySyncDelay = 3.25e-4;  % correct time for diff btwn array and Plx/expo. ...from Amin code: Correct4synch.c
-% % % 
-% % %     spk.ts = cellfun( @(x) uint32(round((x+arraySyncDelay)*sr)), spk.ts, 'UniformOutput',0);
-% % % 
-% % %     % Do same for syncs, but don't include array delay (duh)
-% % %     spk.sync = uint32(round((spk.sync*sr)));
-
-% NOW: DONE BEFORE CONVERTING tsIdx TO SECONDS
-% % % % strip out anything before sync trial start or more than a 2 minutes after last trial sync end.
-% % % % ...this could backfire, for some future extreme case.       --TBC Sept, 2014 --TBC, again in 2019
-% % % if dosync
-% % %     spk.ts = cellfun( @(x) x(x>=tsSyncLimits(1) & x<=tsSyncLimits(end)), spk.ts, 'UniformOutput',0);
-% % % end
-
-
-%%
-% % %
-% % %
-% % %
-% % %
-% % %
 
 
 %% Get waveforms (or kilosort template approximations...or actual waveform means?)
@@ -171,6 +138,7 @@ spk.info = kiloInfo;
 clear pars
 pars.nWf = 10000;                   % Number of waveforms per unit to pull out
 pars.dataDir = kilopath;           % KiloSort/Phy output folder
+% TODO: incorporate stereoprobe trodal waveform means & ci
 pars.trodality = 1;% + contains(lower(spk.info.comment), 'stereo');
 pars.chDepth = spk.info.chanMap.ycoords;
 
@@ -183,31 +151,66 @@ pars.chDepth = spk.info.chanMap.ycoords;
 % gwfparams.spikeTimes = ceil(sp.st(sp.clu==155)*30000); % Vector of cluster spike times (in samples) same length as .spikeClusters
 % gwfparams.spikeClusters = sp.clu(sp.clu==155);
 
+[spk.wf, dupes, wfFigs] = getWaveforms_kilo(tsIdx, pars);
 
-spk.wf = getWaveforms_kilo(tsIdx, pars);
+% Remove duplicate spikes (detected during waveform alignment & SNR calc)
+tsIdx = cellfun(@(t,d) t(~d), tsIdx, dupes, 'uni',0);
+
+% % Convert tsIdx from counts to seconds;   ts = {nUnits, 1}(nspikes,1))
+% spk.ts = cellfun(@(x) x./kiloInfo.sample_rate, tsIdx, 'uni',0);   % ...NOTE: we still need tsIdx to load waveforms below
+
+% Convert tsIdx from counts to seconds, AND sync seconds to PLDAPS frame time from using conversion function from .sync struct;
+spk.ts = cellfun(@(x) sync.plx2ptb(x./kiloInfo.sample_rate), tsIdx, 'uni',0);   %.ts = {nUnits, 1}(nspikes,1))
+
+
+%% Sync spikes with stimulus time
+% Conversion functions are included in the .sync struct
+%   -These aren't necessarily used if analysis all done relative to event syncs, but good to have around --TBC 2019
+
+
+%% Compile output struct
+% spike count for each unit
+spk.n = cellfun(@length, spk.ts);
+spk.snr = spk.wf.snr;
+
 
 %% Depth estimate based on mean waveform amplitude
+% peakCh already computed in getWaveforms_kilo.m
+% ...no reordering here, just metrics
 wfAmp = squeeze(range(spk.wf.mu));
-[wfAmpMax, wfChPeak] = max(wfAmp);
 % zero out small amp channels (mmany could pull center of mass)
 % wfAmpThresh = 0.1*max(wfAmp);
 wfAmpClipped = wfAmp;
-wfAmpClipped(bsxfun(@lt, wfAmp, 0.1*max(wfAmp))) = 0;
+wfAmpClipped(bsxfun(@lt, wfAmp, 0.2*max(wfAmp))) = eps;
 wfDepth = (sum(bsxfun(@times, wfAmpClipped, spk.info.chanMap.ycoords))./sum(wfAmpClipped));
-% Order units from shallowest to deepest first, then largest to smallest amplitude second
-%   (...SNR would be a better second dim, but not yet incorporated into Kilosort pipeline)
-depthSign = sign(diff(spk.info.chanMap.ycoords([1,end])));
-[a, ii] = sortrows([wfDepth; wfAmpMax]',[depthSign, -2]);
 
-[~, nearestChan] = min(abs(wfDepth(:)-kiloInfo.chanMap.ycoords')');
-nUnits = length(nearestChan);
-spk.id = (1:nUnits)' + nearestChan(:)./10^ceil(log10(nUnits)); % == unit#.nearestChan ...replacement/placeholder for former .id == (10*channel# + unit#);
+% [~, nearestChan] = min(abs(wfDepth(:)-kiloInfo.chanMap.ycoords')');
+nUnits = length(spk.wf.peakCh);
+spk.id = (1:nUnits)' + spk.wf.peakCh(:)./10^ceil(log10(nUnits)); % == unit#.nearestChan ...replacement/placeholder for former .id == (10*channel# + unit#);
 spk.wf.depth = wfDepth(:);
-% --- end of main function commands ---
+
+% save wf figs as png only (qualitative diagnostic)
+try
+    if exist('wfFigs','var') %&& evalin('caller','saveout')
+        for u = 1:length(wfFigs)
+            figureFS(wfFigs{u},'portrait',[8 8]);
+            drawnow
+            [~,srcFile] = fileparts(sync.info.pdsSrc);
+            set(gcf, 'name', sprintf('%s u%03d', srcFile,u));
+            saveFigTriplet(0, sprintf('%s   %.2f  (=unit#.PeakChan#)', srcFile, spk.id(u)), [0,1,0,0,0], sprintf('wfFigs_kilosorted%s%s',filesep,srcFile));
+        end
+        % close all wf plot figs
+        close([wfFigs{:}])
+    end
+end
+
+%% --- end of main function commands ---
+
 
 % % % % % % % % % %
 %% Nested functions
 % % % % % % % % % %
+
 
 %% loadSortIds
     function [sortId, sortSrc] = loadSortIds(notThese, sortSrc)
@@ -242,12 +245,14 @@ spk.wf.depth = wfDepth(:);
             return
         end
         
+        
         %% Read SortId source
         fid = fopen(sortSrc);
         C = textscan(fid, '%s%s');
         fclose(fid);
         % Format & scrap header line
         C = [lower(C{2}(2:end)), cellfun(@str2num, C{1}(2:end), 'uni',0)];
+        
         
         %% Parse sortIds
         sortId = cell(size(C,1), 3);
@@ -297,7 +302,6 @@ function [tsIdx, depthEst, depthOrder] = sortByDepth(tsIdx, kilopath, chanMap)
 %       tsIdx(sorted) & depths(sorted) & index
 % 
 
-
 % compile params struct for waveform extraction
 %clear pars
 pars.nWf = 2000;                   % Number of waveforms per unit to pull out
@@ -314,21 +318,22 @@ pars.trodality = 1;% + contains(lower(spk.info.comment), 'stereo');
 % gwfparams.spikeTimes = ceil(sp.st(sp.clu==155)*30000); % Vector of cluster spike times (in samples) same length as .spikeClusters
 % gwfparams.spikeClusters = sp.clu(sp.clu==155);
 
+wf = getWaveforms_kilo(tsIdx, pars, 'align',false, 'acg',false); % skip alignment, acg, & snr calc when just determining depth
 
-wf = getWaveforms_kilo(tsIdx, pars);
 
 %% Depth estimate based on mean waveform amplitude
 wfAmp = squeeze(range(wf.mu));
 [wfAmpMax, wfChPeak] = max(wfAmp);
-% zero out small amp channels (mmany could pull center of mass)
-% wfAmpThresh = 0.1*max(wfAmp);
+[a, depthOrder] = sortrows([wfChPeak; wfAmpMax]',[1, -2]);
+
 wfAmpClipped = wfAmp;
-wfAmpClipped(bsxfun(@lt, wfAmp, 0.1*max(wfAmp))) = 0;
+% % % % zero out small amp channels (mmany could pull center of mass)
+wfAmpClipped(bsxfun(@lt, wfAmp, 0.2*max(wfAmp))) = eps;   %% wfAmpThresh = 0.1*max(wfAmp);
 depthEst = (sum(bsxfun(@times, wfAmpClipped, chanMap.ycoords))./sum(wfAmpClipped));
 % Order units from shallowest to deepest first, then largest to smallest amplitude second
 %   (...SNR would be a better second dim, but not yet incorporated into Kilosort pipeline)
-depthSign = sign(diff(chanMap.ycoords([1,end])));
-[a, depthOrder] = sortrows([depthEst; wfAmpMax]',[depthSign, -2]);
+% depthSign = sign(diff(chanMap.ycoords([1,end])));
+% [a, depthOrder] = sortrows([depthEst; wfAmpMax]',[depthSign, -2]);
 
 % Sort outputs before returning
 depthEst = a(:,1);

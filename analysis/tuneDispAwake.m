@@ -1,8 +1,12 @@
 function [dv] = tuneDispAwake(filebase, unitArgs, saveout, rfFigH)
 
-% cd /Volumes/Tank1/projectData/adaptDist/awake/axel/data
-figDir = '~/Dropbox/Science/projects/3dViewDist/kipp/figs';
-    evalin('caller', sprintf('figDir = ''%s''', figDir))
+
+if evalin('caller', sprintf('exist(''figDir'',''var'') && ~isempty(figDir)'))
+    figDir = evalin('caller', 'figDir')     %#ok<*NOPRT>
+end
+% % Push [figDir] upstream
+% figDir = '~/Dropbox/Science/projects/3dViewDist/kipp/figs';
+%     evalin('caller', sprintf('figDir = ''%s''', figDir))
 
 %% Default inputs
 
@@ -37,7 +41,7 @@ if isstruct(filebase)
     % first input was existing dv struct, not filebase string
     dv = filebase;
 else
-    dv = initDaily(filebase, pwd, spkSrc);
+    dv = initDaily(filebase, pwd, spkSrc, unitArgs);
     
     
     % Make sure this is data from the proper stimulus file type
@@ -219,40 +223,63 @@ dv.tune.commonParams = commonParams;
 %% Polar tuning plots
 fprintf('Plotting Disparity tuning')
 
-% trMx = bsxfun(@rdivide, dv.rf.trMu, max(max(dv.rf.trMu )));
-% rateCut = 2/3;
-figHeight = 8;
-figWscale = 2;
-figsz = [nunits*figWscale, figHeight];
-spMargin = 1/nunits
-
-
+% Parse figure 'steerage' inputs
 if ishandle(saveout)    % saveout>0 && ishandle(saveout)
-    H = figureFS(saveout, 'portrait', figsz);
-    H2 = figureFS(saveout+1, 'portrait', figsz);
-    H3 = figureFS(saveout+2, 'portrait', figsz);
+    H = figure(saveout);
+    H2 = figure(saveout+1);
+    H3 = figure(saveout+2);
     spbase = nunits;
 elseif saveout<-1
-    H = figureFS(abs(saveout), [], figsz);
-    H2 = figureFS(abs(saveout)+1, [], figsz);
-    H3 = figureFS(abs(saveout)+2, [], figsz);
+    hNum = abs(saveout);
+    H = figure(hNum);
+    H2 = figure(hNum+1);
+    H3 = figure(hNum+2);
     spbase = 0;    
 else
-    H = figureFS(400, [], figsz);
-    H2 = figureFS(401, [], figsz);
+    H = figure(400);
+    H2 = figure(401);
+    H3 = figure(402);
     spbase = 0;
 end
-% subplot arrangements
-spx = nunits;
-if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
-    spbase = 0;
-    spx = spx/2;
-end
+
 if isempty( get(H, 'name'))
     set(H, 'name', [fileName,'_mot'])
 end
 set(H2, 'name', [fileName,'_disp'])
 set(H3, 'name', [fileName,'_dirDisp'])
+
+% subplot arrangements
+spx = nunits;
+if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
+    spbase = 0;
+    spx = spx/2;
+else
+    spx = nunits;
+    spbase = 0;
+end
+
+if spbase==0 && nunits~=32
+    spx = 8;
+    spy = ceil(nunits/spx);
+else
+    spx = 16;
+    spy = 2;
+end
+
+% plotbox aspect ratio
+pbax = [3,2,1];
+
+figHeight = 4*spy;
+figWidth = 2+3*spx;
+figsz = [figWidth, figHeight];
+
+spMargin = [.03 .025];%1/nunits
+
+% apply size formatting to [each] figure
+figureFS(H, 'portrait', figsz);
+figureFS(H2, 'portrait', figsz);
+figureFS(H3, 'portrait', figsz)
+
 
 switch stimType{1}
     case 'gabors'
@@ -264,40 +291,25 @@ switch stimType{1}
         %         dd = dirs(:,2)==90;
         dirs2d = dv.tune.dirs;
         disps = dv.tune.disps;
-        
-        
 end
+
 
 legendStr = {};
 for u = 1:nunits
-% % % %     ii = ismember(xyi, find( trMx(:,:,u) >= rateCut ));
-% % %     [db, dp, ob, op] = orivecfit(xy, dv.tune.trMu(:,u));
-% % %     dv.tune.ori(:,u) = [op,ob];
-% % %     dv.tune.dir(:,u) = [dp,db];
-    
-%     subplot_tight(4,3,u,.08);
-%     subplot_tight(2,nunits, u+nunits, 0.3/nunits)
-%     if nunits>1
-%         % sp = subplot_tight(2,nunits, u+nunits, 0.3/nunits);
-%         sp = subplot_tight(2,spx, u+spbase, 0.3/nunits);
-%         %cla
-%     else
-%         sp = subplot_tight(2,spx, u+spbase, .1);
-%         %cla
-%     end
-    
+
     % tuning limits
     yl = [-0.1, 1.1] *round2(mmax(dv.tune.trMu(:,:,u)), 5);
     if yl(2)<50, yl(2)=50; end  % set ylim >= 50 spk/s
     % vector sum tuning
     %     [db, dp, ob, op] = orivecfit(dirs(:,1), dv.tune.trMu(:,u));
 
+    
     % Plot DIR TUNING for each disparity        (wrapping endpoint)
     xl = [-10,370];     xt = 0:90:360;
     % trTmp = dv.tune.trMu(dd,u);
     trTmp = dv.tune.trMu(:,:,u);
     figure(H);
-    sp = subplot_tight(2,spx, u+spbase, spMargin);
+    sp = subplot_tight(spy, spx, u+spbase, spMargin);
     hold on;
     for D = 1:length(disps)
         [db(D), dp(D), ob(D), op(D)] = orivecfit(dirs2d, trTmp(D,:));
@@ -309,14 +321,14 @@ for u = 1:nunits
     xlim(xl)
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', [2,3,1], 'xtick',xt);
+    set(hp, 'plotBoxAspectRatio', pbax, 'xtick',xt);
 
     
     
     % Plot DISPARITY TUNING for each direction  (cartesian axes)
     figure(H2);
     xl = 1.1*disps([1,end]);        xt = -2:.5:2;
-    sp2 = subplot_tight(2,spx, u+spbase, spMargin);
+    sp2 = subplot_tight(spy, spx, u+spbase, spMargin);
     hold on;
     for D = 1:length(dirs2d)
         %         set(sp, 'colororderindex', 2)
@@ -328,22 +340,13 @@ for u = 1:nunits
     xlim(xl);
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', [2,3,1], 'xtick',xt);
-        if u == 1,
-            legendStr = {legendStr, 'disp'};
-        end
-
-        % %         % XZ tuning polar plot
-        % %         plh = polarplot(d2r(dirs2d([end,1:end])), trTmp3([end,1:end]),'v-', 'markersize',2, 'linewidth',.5);
-        % %         if u == 1,
-        % %             legendStr = {legendStr, 'XZ'};
-        % %         end
-        % %
-        % %         curveColor = get(plh, 'color');
-
-        % rticks = unique(round2(max(trTmp)*[0.5,1], 5));
-        % set(hp, 'ThetaTick',[0:45:360], 'RTick', rticks)
-        
+    set(hp, 'plotBoxAspectRatio', pbax, 'xtick',xt);
+    if u == 1,
+        legendStr = {legendStr, 'disp'};
+    end
+    
+    
+    
     % Plot DIR-DISP Surface         (wrapping dir endpoint)
     xl = [-10,370];     xt = 0:90:360;
     yl = 1.1*disps([1,end]);        yt = -2:.5:2;
@@ -351,18 +354,22 @@ for u = 1:nunits
     % trTmp = dv.tune.trMu(dd,u);
     trTmp = dv.tune.trMu(:,:,u);
     figure(H3);
-    sp3 = subplot_tight(2, spx, u+spbase, spMargin);
+    sp3 = subplot_tight(spy, spx, u+spbase, spMargin);
     hold on;
     surf(xx, yy, trTmp(:,[end,1:end]), 'linestyle','none');%, 'FaceColor','interp');
     ylim(yl),   ylabel('disp', 'fontsize',8);
     xlim(xl),   xlabel('dir', 'fontsize',8);
     box off,    view(2)
-    set(gca, 'plotBoxAspectRatio',[2,3,1], 'xtick',xt, 'ytick',yt);
+    set(gca, 'plotBoxAspectRatio',pbax, 'xtick',xt, 'ytick',yt);
     
-    
-    titext = sprintf('ch.%d:', dv.uprb.id(u));
-%         titext = sprintf('ch.%d:\nO(%2.0f, %1.2f)\tD(%2.0f, %1.2f)', dv.uprb.id(u), [op,ob], [dp,db]);
-%         titext = sprintf('ch.%d:\nO(%2.0f, %1.2f)\tD(%2.0f, %1.2f)\nO(%2.0f, %1.2f)\tD(%2.0f, %1.2f)', dv.uprb.id(u), [op,ob], [dp,db], [op3,ob3], [dp3,db3]);
+    % unit/channel info in axis title text
+    if mod(dv.uprb.id(u),1) == 0
+        % old unit id format: chan*10+unit#
+        titext = sprintf('ch.%d',dv.uprb.id(u));
+    else
+        % kilosort id:  Unit#.peakChannel#
+        titext = sprintf('u%05.2f',dv.uprb.id(u));
+    end
 
 
 % %             end
@@ -371,20 +378,9 @@ for u = 1:nunits
     dv.tune.ori(:,u) = [op, ob];
     dv.tune.dir(:,u) = [dp, db];
     
-%     dv.tune.ori3(:,u) = [op3, ob3];
-%     dv.tune.dir3(:,u) = [dp3, db3];
-    
-            %     ctS{u} =   sparse(yi, xi, rate.count(:,u),      matsz(1), matsz(2));
-            %     durS{u} =  sparse(yi, xi, rate.trialdur,   matsz(1), matsz(2));
-            %     trMuS{u} = sparse(yi, xi, rate.raw(:,u),        matsz(1), matsz(2));
-            %     ntrS{u} =  sparse(yi, xi, 1,               matsz(1), matsz(2));
             
     if u==1
         titext = {sprintf('%s\t%s ', fileName, dv.uprb.info.comment), titext}; %#ok<*AGROW>
-        % ht = title(sprintf('%s\t%s', fileName, dv.uprb.info), 'fontsize',10, 'interpreter','none');
-%         if nunits>=4
-%             set(ht,'horizontalalignment','left')
-%         else, set(ht,'horizontalalignment','center'), end
     end
     ht = title(sp, titext, 'fontsize',10, 'fontweight','normal', 'interpreter','none');
     ht = title(sp2, titext, 'fontsize',10, 'fontweight','normal', 'interpreter','none');
@@ -397,62 +393,29 @@ for u = 1:nunits
         ha = findobj(figure(rfFigH), 'type','axes','tag',sprintf('ch%drf',u));
         set(ha, 'NextPlot','add');  %axes(ha); hold on;
         hacl = get(ha,'clim');
-        % tune stimulus (conv. dia to radius)
-%         circle(stimPos(1), stimPos(2), stimPos(3)/2, 'none', .8*[1 1 1], 2)
         tstCol = .8*[1 .4 .4];
-        %           circle(tstStim(1), tstStim(2), tstStim(3)/2.355/2, 'none', tstCol, 1)
-        %            tstStim = [7.5, -0.5, 3.5*2.355]
-%         % Draw contours for gabor contrast envelope at [0.2, 0.5, 0.95] intensity
-%         gw = commonParams.sz; % stim fwhm    tstStim(3)/2.355;
-%         gww = gw*2.355; gx = linspace(-gww,gww,100); [gx,gy] = meshgrid(gx, gx); gg = gauss2D_R(gx, gy, gw, gw, 0, 1);
-%         contour(ha, gx+stimPos(1), gy+stimPos(2), gg, [.2 .5 .95], 'color', tstCol);
 
         % Draw contours for gabor contrast envelope at [0.2, 0.5, 0.95] intensity
         gw = commonParams.sz; % stim fwhm    tstStim(3)/2.355;
         gww = gw*1.2; gx = linspace(-gww,gww,100); [gx,gy] = meshgrid(gx, gx); gg = zeros(size(gx)); gg(:) = hypot(gx(:), gy(:));   % gauss2D_R(gx, gy, gw, gw, 0, 1);
         contour(ha, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linewidth',1);
-        % set(gco, 'linewidth',1);
         
-        %         uistack(ha, 'bottom')
         set(ha, 'clim',hacl);
         drawnow nocallbacks
     end
     
     figure(H2);
     % add waveform inset
-    if ~isempty(dv.uprb.wf.ci)
-        ap = get(hp, 'position');
-        aw = axes('position', [ap(1)+0.8*ap(3), ap(2), 0.4*ap(3), 0.2*ap(4)]);
-        plot(aw, dv.uprb.wf.ci(:,:,u), 'r', 'linewidth',.5);
-        hold on,
-        plot(aw, dv.uprb.wf.mu(:,u), 'k', 'linewidth',.5);        
-        if range(dv.uprb.wf.mu(:))<1
-            % wf vals in mV
-            yl = .1; %yl = .04;
-        else
-            % else...wf vals in arb. a/d units (3000 is good)
-            yl = 3000;
-        end   
-        yt = yl/2;
-        set(aw, 'color','none', 'yAxisLocation','right', 'linewidth',0.5, 'xticklabel',[],...
-            'yticklabel',[], 'ytick',yt*[-1,0,1], 'ylim',yl*[-1,1],...
-            'xlim',[1,size(dv.uprb.wf.ci,1)], 'box','off', 'plotboxaspectRatio',[3,2,1]);
-        uistack(aw, 'top')
+    if ~isempty(dv.uprb.wf.mu)
+        addWfInset(hp, dv.uprb.wf, u);
     end
+    
     drawnow nocallbacks
     % progress
     fprintf('.')
 end
 fprintf('\n')
 % saveFigTriplet(1, get(gcf,'name'), 0)
-
-% dv.rf.d2pix = GetConversionFactor(dv.expo, 'deg', 'pix');%full(dv.expo.environment.Conversion.units.ConversionMatrix(6,4));
-% xdata = round(expodata(:,5)*dv.rf.d2pix);
-% ydata = round(expodata(:,6)*dv.rf.d2pix);
-
-
-%% run hacky plotting script
-% rfPlotHak(dv, h, saveout)
 
 
 

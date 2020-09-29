@@ -1,7 +1,8 @@
-function z = round2(x,y)
+function z = round2(x,y,mode)
 %ROUND2 rounds number to nearest multiple of arbitrary precision.
-%   Z = ROUND2(X,Y) rounds X to nearest multiple of Y.
-%
+%   Z = ROUND2(X,Y, mode) rounds X to nearest multiple of Y.
+%       [mode] optional string input to use 'floor' or 'ceil' instead of 'round'
+% 
 %Example 1: round PI to 2 decimal places
 %   >> round2(pi,0.01)
 %   ans =
@@ -31,7 +32,7 @@ function z = round2(x,y)
 % See also ROUND.
 
 %% defensive programming
-narginchk(2,2);
+narginchk(2,3);
 nargoutchk(0,1);
 
 if numel(y)>1
@@ -39,4 +40,12 @@ if numel(y)>1
 end
 
 %%
-z = round(x/y)*y;
+if nargin <3 || strcmpi(mode(1),'r')
+    z = round(x/y)*y;
+
+elseif strcmpi(mode(1),'c')
+    z = ceil(x/y)*y;
+
+elseif strcmpi(mode(1),'f')
+    z = floor(x/y)*y;
+end
