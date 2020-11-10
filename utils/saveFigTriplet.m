@@ -104,7 +104,8 @@ end
 % Matlab figure
 if filetypes.matlab
     % saveas(H,fullfile(figDir,'matlab',[fname,'.fig']),'fig');   % causes huge file if matlab default .mat set to -v7.3 (large file/variable sizes)
-    hgsave(H,fullfile(figDir,'matlab',figSubDir,[fname,'.fig']),'-v7')
+    % hgsave(H,fullfile(figDir,'matlab',figSubDir,[fname,'.fig']),'-v7')
+    savefig(H, fullfile(figDir,'matlab',figSubDir,[fname,'.fig']), 'compact') % smaller
 end
 
 if filetypes.tiff
