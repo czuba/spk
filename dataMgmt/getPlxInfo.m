@@ -24,8 +24,13 @@ function plxInfo = getPlxInfo(plxFilename)
 %     [wfcounts]        (plx_info.m)
 %     [evcounts]        (plx_info.m)
 %     [contcounts]      (plx_info.m)
+%     [strobes]
+%     [rstart]
+%     [rstop]
+%     [plx2clock]
 % 
 % 2018-12-02  TBC  Wrote it.
+
 
 % General PLX info struct
 tic
@@ -47,12 +52,31 @@ try % prevent crash if no AD channels
 catch
     fprintf(2, '\tProblem while reading analog data info from plx file.\n\tLikely just buggy SDK functions. Carry on, but be warned...\n')
 end
-ii = adCount>0; % discard empty channels
+
+% Discard empty channels and low sampling rate continuous channels (LFP)
+ii = adCount>0 & adFreq==max(unique(adFreq));
+
 plxInfo.adNames = adNames(ii);
 plxInfo.adNumCountFreqGains = [adRawNum(ii)', adCount(ii), adFreq(ii), adGains(ii)];
+
+% Get full pl2 file info
+[~,~,ext] = fileparts(plxFilename);
+if contains(ext,'pl2')
+    pl2 = PL2GetFileIndex(plxFilename);
+    plxInfo.nChannels = pl2.NumberOfRecordedSpikeChannels;
+else
+    plxInfo.nChannels = size(plxInfo.adNames,1);
+end
 
 % slightly more nitty-gritty counts from plx_info.m
 [plxInfo.tscounts, plxInfo.wfcounts, plxInfo.evcounts, plxInfo.contcounts] = plx_info(plxFilename);
 
+% get PLX events
+try
+    plxInfo = getPlxEvents(plxInfo);
+end
 
+% report to command window
 fprintf('\t%2.2f sec to query info on plx file:\t%s\n', toc, plxFilename);
+
+end %main function

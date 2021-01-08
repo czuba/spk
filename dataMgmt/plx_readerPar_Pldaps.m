@@ -40,8 +40,10 @@ function [spk, OpenedFileName] = plx_readerPar_Pldaps(OpenedFileName, arg, sync)
 % Plot waveforms as: (where n=desired unit index)
 %       plot(wf.mu(:,n),'-'); hold on, plot(wf.ci(:,:,n), '--')
 % 
-% NOTE: Currently only gets one event channel (Expo-centric). Pldaps provides
-%       much more event info & chans that this needs to be updated for
+% NOTE: Event loading typically occurs in syncPlexon2PDS.m, which only focuses on strobed word events.
+%       The events returned in spk.info are [intentionally] not preprocessed, and timestamps are in
+%       original PLX acquisition time.
+%       
 % 
 % 2013-xx-xx  Written by T.Czuba, based on Plexon SDK
 % 2013-2017   TBC  Various edits, extensions, output struct developments
