@@ -30,6 +30,8 @@ function plxInfo = getPlxInfo(plxFilename)
 %     [plx2clock]
 % 
 % 2018-12-02  TBC  Wrote it.
+% 2021-01-08  TBC  Added basic event loading (for determining where experiment files were run w/in longer plx files)
+%                  .plx2clock converts plx event times to [approx] real clock time (for comparison to PLDAPS file times)
 
 
 % General PLX info struct

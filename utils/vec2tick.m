@@ -5,11 +5,11 @@ function st = vec2tick(vec, fmt)
 %   [fmt] = text format string (def= '%2.2f ')
 % only outputs single row of stringified numbers (no matrix possible...)
 % 
-% 2017-01-04  TBC  Wrote it.
+% 2107-01-04  TBC  Wrote it.
 
 if nargin<2 || isempty('fmt') || ~ischar(fmt)
     % must be a formatting string
-    fmt = '%.5g ';
+    fmt = '%2.2f ';
 elseif (fmt(end)*1) ~= (1*' ')
     % format must end in space
     fmt = [fmt, ' '];
@@ -18,5 +18,5 @@ end
 st = textscan( num2str(vec(:)', fmt), '%s');
 st = st{:};
 
+end %main function
 
-% % % st = strread( num2str(vec, fmt), '%s');  % orig, but matlab recommended against strread.m (...dont know why)

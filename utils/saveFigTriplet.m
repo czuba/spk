@@ -8,12 +8,22 @@ function saveFigTriplet(withdate, infostr, fileflags, figSubDir, varargin)
 %   --by default adds current date to file name
 %   Mines calling workspace for path to figure directory ('figDir')
 %   --creates dir structure within figDir if not already present
+%
 %   
-% 2014-04-16 TBC 
+% 2014-04-16 TBC  Wrote it. (czuba@utexas.edu)  
+% 2021-05-18 TBC  Cleaned & commented
+%
+
+% NOTE: Rasterized formats (jpg, png, tiff) *consistently* come out rotated
+% by 90 deg, but content spacing and aspect ratio are correct & unclipped (!?@!!)
+% Vector formats (pdf & eps) of the same figures are oriented correctly...go figure.
+% -- TBC
 
 H = gcf;
 
+%% Parse inputs
 if ~exist('withdate','var') || isempty(withdate)
+    % default: append date to filename as '_yyyymmmdd'
     withdate = 1;
 end
 
@@ -22,8 +32,18 @@ filetypes = struct('tiff',0, 'png',0, 'eps',1, 'matlab',1, 'pdf',1);
 filefn = fieldnames(filetypes);
 
 if nargin>2 && ~isempty(fileflags)
-    for i = 1:length(fileflags)
-        filetypes.(filefn{i}) = fileflags(i);
+    if ischar(fileflags)
+        fileflags = {fileflags};
+    end
+    if iscell(fileflags)
+        % string input
+        for i = 1:length(filefn)
+            filetypes.(filefn{i}) = contains(filefn{i},fileflags);
+        end
+    else
+        for i = 1:length(fileflags)
+            filetypes.(filefn{i}) = fileflags(i);
+        end
     end
 end
 
@@ -31,12 +51,9 @@ if nargin <4 || isempty(figSubDir)
     figSubDir = [];
 end
 
-% if exist('varargin','var') && ~isempty(varargin)
-    
-
 % get vars from figure tag or caller wkspc
 Htag = get(H, 'tag');
-if ~isempty(Htag) && contains(Htag, filesep)%isfolder(Htag)
+if ~isempty(Htag) && contains(Htag, filesep)
     figDir = Htag;
     
 elseif evalin('caller','exist(''figDir'',''var'')')
@@ -44,6 +61,7 @@ elseif evalin('caller','exist(''figDir'',''var'')')
 end
 
 
+%% Determine filename
 fname = get(H,'name');
 if withdate
     datefmt = 'yyyymmmdd';
@@ -65,7 +83,9 @@ if ~exist('figDir','var') || isempty(figDir)
     figDir = fullfile(pwd,'figs');
 end
 
-% append info string to bottom of figure if provided as input or if exist in the workspace
+
+%% Append info string to bottom of figure
+%  - if provided as input or if exist in the workspace
 ax = gca;
 fsz = 10;
 % check for infostr in calling directory if not passed as input
@@ -103,8 +123,6 @@ end
 
 % Matlab figure
 if filetypes.matlab
-    % saveas(H,fullfile(figDir,'matlab',[fname,'.fig']),'fig');   % causes huge file if matlab default .mat set to -v7.3 (large file/variable sizes)
-    % hgsave(H,fullfile(figDir,'matlab',figSubDir,[fname,'.fig']),'-v7')
     savefig(H, fullfile(figDir,'matlab',figSubDir,[fname,'.fig']), 'compact') % smaller
 end
 
@@ -137,21 +155,7 @@ if filetypes.eps
 end
 
 % Tell em what you did
-% fprintf(2, '#')%
 fprintf(2, '\b\tSaved to: %s\n ', figDir);
 
 
-% % % 
-% % % % Cycle through types that need eval call to 'print' fxn
-% % % ftype = {'pdf','eps'};
-% % % ptype = {'-dpdf -r400', '-depsc'};  %-tiff
-% % % for i = 1:length(ftype), 
-% % %     try
-% % %         eval(['print ',ptype{i},' -painters ',fullfile(figDir,ftype{i},[fname,'.',ftype{i}])]); 
-% % %     catch
-% % %         fprintf(2,'\t\tErrored trying to save %s file: %s\n', ftype{i}, fname);
-% % %     end
-% % % end
-
-
-return
+end %main function
