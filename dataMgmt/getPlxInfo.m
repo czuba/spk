@@ -1,4 +1,4 @@
-function plxInfo = getPlxInfo(plxFilename)
+function plxInfo = getPlxInfo(plxFilename, plotEvents)
 %
 % Retrieve all info about PLX/PL2 file [plxFilename]% 
 % -- A helper function to simplify extraction of all outputs from the two
@@ -34,13 +34,35 @@ function plxInfo = getPlxInfo(plxFilename)
 %                  .plx2clock converts plx event times to [approx] real clock time (for comparison to PLDAPS file times)
 
 
-% General PLX info struct
+%% Defaults
+if nargin<2 || isempty(plotEvents)
+    plotEvents = 1;
+end
+
+%% General PLX info struct
 tic
 fn = {'path', 'ver', 'freq', 'comment', 'trodality', 'wfSize', 'preThresh', 'spikePeakV', 'spikeBitRes', 'slowPeakV', 'slowBitRes', 'duration', 'dateStr'};
 nfo = cell(1,length(fn));
 
 [nfo{:}] = plx_information(plxFilename);
 plxInfo =  cell2struct(nfo, fn, 2);
+
+% Additional pl2 file details
+[ ~, isPl2 ] = internalPL2ResolveFilenamePlx( plxFilename );
+if isPl2
+    pl2 = PL2GetFileIndex(plxFilename);
+    plxInfo.CreatorSoftwareName = pl2.CreatorSoftwareName;
+    plxInfo.CreatorSoftwareVersion = pl2.CreatorSoftwareVersion;
+    if strcmpi(pl2.CreatorSoftwareName(1:2),'SC')
+        % "Sort Client" ...retro control software for Plexon MAP system
+        % - additional checks & 
+        plxInfo.isMAP = true;
+    else
+        plxInfo.isMAP = false;
+    end
+    
+end
+
 
 % AD channel info (continuous spike & LFP)
 [adNames, adRawNum, adCount, adFreq, adGains] = deal([]);
@@ -55,15 +77,15 @@ catch
     fprintf(2, '\tProblem while reading analog data info from plx file.\n\tLikely just buggy SDK functions. Carry on, but be warned...\n')
 end
 
-% Discard empty channels and low sampling rate continuous channels (LFP)
+
+%% Discard empty channels and low sampling rate continuous channels (LFP)
 ii = adCount>0 & adFreq==max(unique(adFreq));
 
 plxInfo.adNames = adNames(ii);
 plxInfo.adNumCountFreqGains = [adRawNum(ii)', adCount(ii), adFreq(ii), adGains(ii)];
 
-% Get full pl2 file info
-[~,~,ext] = fileparts(plxFilename);
-if contains(ext,'pl2')
+% Channel count (explicitly)
+if isPl2
     pl2 = PL2GetFileIndex(plxFilename);
     plxInfo.nChannels = pl2.NumberOfRecordedSpikeChannels;
 else
@@ -73,12 +95,16 @@ end
 % slightly more nitty-gritty counts from plx_info.m
 [plxInfo.tscounts, plxInfo.wfcounts, plxInfo.evcounts, plxInfo.contcounts] = plx_info(plxFilename);
 
-% get PLX events
-try
-    plxInfo = getPlxEvents(plxInfo);
-end
 
+%% get PLX events
+% try
+    plxInfo = getPlxEvents(plxInfo, plotEvents);
+% end
+
+
+%% Done.
 % report to command window
-fprintf('\t%2.2f sec to query info on plx file:\t%s\n', toc, plxFilename);
+% fprintf('\t%2.2f sec to query info on plx file:\t%s\n', toc, plxFilename);
+
 
 end %main function

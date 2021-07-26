@@ -58,6 +58,8 @@ elseif isstruct(plxPath)
     plxPath = plxPath.path;
 end
 
+[ ~, isPl2 ] = internalPL2ResolveFilenamePlx( plxPath );
+
 % expand home directory path (else will crash in mexplex [Plexon SDK])
 if strcmp(plxPath(1),'~')
     [~,jnk] = system('echo $HOME');  jnk = jnk(1:end-1);
@@ -86,36 +88,42 @@ if plxStrobeTs == -1
     % - extract them individually, then leave it to user to make sense of what they've done
     plxStrobeTs = [];
     plxStrobeVals = [];
-    for i = find(evStruct.evcounts>0)'
-        if strcmpi(evStruct.evNames{i}(1:3),'evt')
-            thisEv = evStruct.evNames{i};
-            evVal = str2num(thisEv(4:end));
-            [~, theseTs] = plx_event_ts(plxPath, plx_event_resolve_channel(plxPath, thisEv));
-            plxStrobeTs = [plxStrobeTs; theseTs];
-            plxStrobeVals = [plxStrobeVals; evVal*ones(size(theseTs))];
-        end
+    for i = find(evStruct.evcounts(:)>0 &  contains(evStruct.evNames(:),{'evt','event'},'ignorecase',1))
+        thisEv = evStruct.evNames{i};
+        evVal = str2num(thisEv(end-2:end));
+        [~, theseTs] = plx_event_ts(plxPath, plx_event_resolve_channel(plxPath, thisEv));
+        plxStrobeTs = [plxStrobeTs; theseTs];
+        plxStrobeVals = [plxStrobeVals; evVal*ones(size(theseTs))];
     end
     [plxStrobeTs, ord] = sort(plxStrobeTs);
     plxStrobeVals = plxStrobeVals(ord);
 end
-fprintf('\t%2.2f sec to load events from plx file:\t%s\n', toc, plxPath);
+% fprintf('\t%2.2f sec to load events from plx file:\t%s\n', toc, plxPath);
 
 evStruct.strobes = [plxStrobeTs, plxStrobeVals];
 
 %% Post-process & info
 
 % RSTART & RSTOP
-try
-    % This will only work with PL2 files
-    % ...typical PlexonSDK functions are borked for RSTART & RSTOP events (circa 2020)
-    ev = PL2EventTs(plxPath, 'RSTART');
-    evStruct.rstart = ev.Ts;
-    ev = PL2EventTs(plxPath, 'RSTOP');
-    evStruct.rstop = ev.Ts;
-catch
-    fprintf(2,'!~!\tWarning: unable to read RSTART & RSTOP events from plx file\n')
-    evStruct.rstart = [];
-    evStruct.rstop = [];
+% - hacky...start/stop event retrieval methods are super inconsistent between plx, pl2, omniplex, & map file sources
+if isPl2
+    % This will only work with OmniPlex PL2 files
+    evStruct.rstart = PL2StartStopTs(plxPath, 'start');
+    evStruct.rstop = PL2StartStopTs(plxPath, 'stop');
+    %     % ...typical PlexonSDK functions are borked for RSTART & RSTOP events (circa 2020)
+    %     ev = PL2EventTs(plxPath, 'RSTART');
+    %     evStruct.rstart = ev.Ts;
+    %     ev = PL2EventTs(plxPath, 'RSTOP');
+    %     evStruct.rstop = ev.Ts;
+else
+    fprintf(2,'!~!\tWarning: RSTART & RSTOP events from .plx file hardcoded\n')
+    try
+        [~, evStruct.rstart] = plx_event_ts(plxPath, 258);
+        [~, evStruct.rstop] = plx_event_ts(plxPath, 259);
+    catch
+        evStruct.rstart = [];
+        evStruct.rstop = [];
+    end
 end
 
 % Timestamp to clock conversion
@@ -124,7 +132,7 @@ if isfield(evStruct, 'dateStr')
     t0 = evStruct.dateStr;
 else
     % get dateStr directly
-      [~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, Duration, t0] = plx_information(plxPath);
+      [~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, t0] = plx_information(plxPath);
 end
 
 % convert to seconds of day
@@ -140,18 +148,23 @@ hasHS = any(evStruct.strobes(1:min(100,end), 2)>=2^14);
 if hasHS
     hs1 = find(evStruct.strobes(1:min(100,end),2)>=2^14, 1, 'first');
     if all(evStruct.strobes( hs1+(0:5), 2) >= 2^14)
-        fprintf('\tApplying [qualitative] sync of event times to PLDAPS clock\n')
+        % fprintf('\tApplying [qualitative] sync of event times to PLDAPS clock\n')
+        % !!!----------------------------------------------------------------------------------------------!!!
+        % !!! Note: this is NOT a substitute for proper data syncing, just for coarse event time plotting
+        % !!!----------------------------------------------------------------------------------------------!!!
+        % !!! syncPlexon2PDS.m should always be used for syncing for true analyses
+        % !!!----------------------------------------------------------------------------------------------!!!
         % - First set of 6 sync values sent by PLDAPS are "unique trial identifiers":
         %   [trial#, month, day, hour, minute, second]
-        % - values are shifted into the upper part of strobed word register by adding 2^14
-        % - use this time stamp as [coarse] sync to stimulus computer
-        % - - !! Note: this is NOT a substitute for proper data syncing (via syncPlexon2PDS.m) !!
-        t0prime = datetime([year(t0), evStruct.strobes( hs1+(1:5), 2)'-2^14]); % strobed datetime of first sync(s)
+        % - values are shifted into the upper part of strobed word register by adding 2^14        
+        % PLDAPS time value that was sent in the first sync
+        t0prime = timeofday(datetime([year(t0), evStruct.strobes( hs1+(1:5), 2)'-2^14])); % strobed datetime of first sync(s)
+        % Plexon clocktime the sync was received (sync seconds + recording start clocktime)
         s1 = evStruct.plx2clock(evStruct.strobes(hs1,1)); % plx datetime of first sync
+        % Equivalent PLDAPS clocktime that Plexon recording was started
+        t0pldaps = t0prime - seconds(evStruct.strobes(hs1,1));
         % update t0time & conversion function handle
-        t0pldaps = t0time + (timeofday(t0prime)-s1);
         evStruct.plx2pldaps = @(x) duration(t0pldaps + seconds(x), 'format','hh:mm:ss.SS');%x + t0sec;
-        pldapsOffset = s1-t0time;
     end
 else
     pldapsOffset = 0;
@@ -173,16 +186,21 @@ if plotEvents
         try
             % create background of all files run during this session
             % get table of PDS files from this session
-            tt = scanSesh([],fullfile(fileparts(evStruct.path),'..'), 1, 0)
+            [tt, seshDat] = scanSesh([],fullfile(fileparts(evStruct.path),'..'), 1, 0);
             % plot bands for each file
             % - possible temporal offset btwn acquisition & stimulus computers if clocks aren't synced,
             %   but close enough for eyeballing file time range for spike sorting
-            p0 = timeofday(datetime(tt.pdsTime,'InputFormat','HHmm'));
-            p1 = p0 + minutes(tt.durMin);
-            xs = [p0, p1.*[1,1],p0.*[1,1]];
+            % PDS times from file names
+            %   p0 = timeofday(datetime(tt.pdsTime,'InputFormat','HHmm'));
+            % PDS times from file starts (incl. seconds)
+            p0 = timeofday(datetime(arrayfun(@(x) x.baseParams.session.initTime, seshDat),'ConvertFrom','datenum')); % ...there must be a more direct way, but whatever
+            p0 = sort(p0); % ...sometimes out of order depending on file sort
+            pldapsOffset = min(abs(p0-t0prime));
+            p1 = p0(:) + minutes(tt.durMin);
+            xs = [p0(:), p1.*[1,1],p0(:).*[1,1]];
             ys = repmat([0,0,3000,3000,0],size(xs,1),1);
             for s = 1:length(sp) % each subplot
-                fill(sp(s), seconds(xs'-t0time + pldapsOffset), ys','k','facealpha',.1, 'yliminclude','off')
+                fill(sp(s), seconds(xs'-t0pldaps+pldapsOffset), ys','k','facealpha',.1, 'yliminclude','off', 'xliminclude','off')
                 % p0.Format = 'hh:mm';
                 % set(gca, 'xtick',p0)
                 set(sp(s), 'nextplot','add')
@@ -206,6 +224,7 @@ if plotEvents
         title(sp(end), 'PLDAPS session & trial syncs', 'interp','none');
         set(sp(end), 'nextplot','add')
     end
+    drawnow
 end
 
 end %main function
