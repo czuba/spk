@@ -1,4 +1,4 @@
-function [dv] = tuneXzAwake(filebase, unitArgs, saveout, rfFigH)
+function [dv] = tuneXzAwake3d(filebase, unitArgs, saveout, rfFigH)
 
 
 if evalin('caller', sprintf('exist(''figDir'',''var'') && ~isempty(figDir)'))
@@ -73,8 +73,24 @@ fileName = dv.pds.baseParams.session.file(1:end-4);
 
 %% Compute rate from condMatrix
 
+% find strobes of trials from each unique viewing distance
+ii = cellfun(@(x) isfield(x,'display'), dv.pds.data);
+% just trials with a .display field
+% extract viewdist from those trials
+vd = double(ii);
+vd(ii) = cellfun(@(x) x.display.viewdist, dv.pds.data(ii));
+% other trials were same as initial, therefore [.display.viewdist] WAS NOT included during PDS data saving compression
+% - *** TODO: fix this ***
+vd(~ii) = dv.pds.baseParams.display.viewdist;
+[viewDist, ~, vdi] = unique(vd);
+% - [vdi] will be size [ntrials,1]
+% - calcRate_condMatrix expects [syncID] input as set of sync indices or logical of size [length(dv.uprb.sync), 1]
+for i = 1:numel(viewDist)
+    syncID{i} = ismember(dv.uprb.sync.strobe(:,3), find(vdi==i));
+end
+
 % calc spike rate for each presentation
-rate = calcRate_condMatrix(dv.uprb, dv.pds);
+rate = calcRate_condMatrix(dv.uprb, dv.pds, [], syncID{end});
 
 nunits = size(rate.count,2);
 
@@ -117,7 +133,7 @@ switch stimType{1}
         end
         [xi, yi] = ind2sub(matSz, diri);
         
-    case {'dotBall', 'xzDots'}
+    case {'dotBall','xzDots'}
         commonParams.pos = dv.pds.baseParams.(baseModule).stimCtr;
         commonParams.gridSz = dv.pds.baseParams.(baseModule).gridSz;
         commonParams.sz = dv.pds.baseParams.(baseModule).ballSz;    %gabSz;
@@ -149,7 +165,9 @@ switch stimType{1}
         ds = dirs(1:rate.condDims(1), 1);       % directions
         as = dirs(1:rate.condDims(1):end, 2);   % axes (??)
         
-
+    otherwise
+        warning('Unrecognized stimulus type/name')
+        keyboard
 end
 
 
@@ -254,6 +272,10 @@ switch stimType{1}
         dirs3d = dirs(dirs(:,2)==90, 1);
         dirs2d = dirs(dirs(:,2)==0,1);
         respIdx = 2;
+        
+    otherwise
+        warning('Unrecognized stimulus type/name')
+        keyboard
 end
 
 lcols = get(groot, 'DefaultAxesColorOrder');

@@ -74,26 +74,51 @@ if ~exist('type','var') || isempty(type)
     type = 'tabloid';
 end
 
+% PaperUnits must not be normalized, per help:
+%   "You cannot set the PaperSize property if the PaperUnits property is set to 'normalized'. Attempting to do so results in an error."
+set(h,'PaperUnits', 'inches')
 
 set(h,'PaperOrientation', ori);
-    orient(ori); %...and again (thanks Matlab)
-    
+orient(ori); %...and again (thanks Matlab)
+
+% Set paper size/type
 try
-    set(h,'PaperType', type);
+    if isnumeric(type)
+        if strcmpi(ori,'portrait')
+            type = sort(type,'ascend');
+        else
+            type = sort(type,'descend');
+        end
+        set(h, 'PaperType','<custom>', 'PaperSize', type)
+    else
+        set(h,'PaperType', type);
+    end
 catch
-    set(h, 'PaperType','<custom>', 'PaperSize', sort(type,'descend'))
+    warning('Figure size setting failed. Using default ''tabloid'' (')
+    set(h,'PaperType', 'tabloid');
 end
 
 
 set(h,'PaperUnits', 'inches')
 sz = get(h,'PaperSize');
 set(h,'PaperPositionMode','manual');
-n = min([.1*sz, 0.5]);
+% leave at least 0.2 inch margins
+n = min([.1*sz, 0.4]);
 set(h,'PaperPosition',[n/2, n/2, sz(2)-n, sz(1)-n]);
 
 % just keep doing this till it sticks
 set(h,'PaperOrientation', ori);
 orient(ori); %...and again (thanks Matlab)
+
+% AAAAGGGHHHH!!!! WHY is orientation between postscript & image formats is a garbage fire!
+% This seems to produce reliable & consistent outputs (for Portrait, at least)
+pp = get(h,'PaperPosition');
+if strcmpi(ori,'portrait')
+    set(h, 'PaperPosition',[pp(1:2), sort(pp(3:4),'ascend')]);
+else
+    set(h, 'PaperPosition',[pp(1:2), sort(pp(3:4),'descend')]);
+end
+
 
 % silence unneeded outputs
 if nargout>0

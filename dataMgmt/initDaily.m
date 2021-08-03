@@ -70,7 +70,7 @@ if nargin<2 || isempty(basePath)
     basePath = pwd;
     basePath = homeTilda(basePath);
 end
-dv.paths.root = basePath;
+dv.paths.root = homeTilda(basePath);
 
 % PDS file selection modal if [baseName] not specified
 if nargin<1 || isempty(baseName)
@@ -105,8 +105,25 @@ if ~isempty(fd)
             
         case 'pds'
             % load PDS struct into dv output struct
-            dv.paths.pds = fullfile(pdsPath, fd.name);
+            dv.paths.pds = homeTilda(fullfile(pdsPath, fd.name));
             dv.pds = pdsImport(dv.paths.pds);
+            % prune excess fields from 'dotBall' stimuli (RFpos, 3D tuning; ...pds files >100MB)
+            fn = dv.pds.baseParams.pldaps.modNames.all(contains(dv.pds.baseParams.pldaps.modNames.all, {'ddDots', 'xzDots'}));
+            if ~isempty(fn)
+                for i = 1:length(dv.pds.data)
+                    for ii = fn
+                        if isfield(dv.pds.data{i}.(ii{:}),'pos0')
+                            dv.pds.data{i}.(ii{:}) = rmfield(dv.pds.data{i}.(ii{:}),'pos0');
+                        end
+                        if isfield(dv.pds.data{i}.(ii{:}),'pos')
+                            dv.pds.data{i}.(ii{:}) = rmfield(dv.pds.data{i}.(ii{:}),'pos');
+                        end
+                    end
+                end
+            end
+            %mkdir(fullfile(pdsPath,'mat'));
+            thisfile = fullfile(pdsPath,[fd.name(1:end-3),'mat']);
+            save(thisfile,'-struct','dv');
     end
     
     % PDS stimulus file info
@@ -213,7 +230,7 @@ for ss = 1:length(spkSrc)
     if isnumeric(unitArgs)
         modeStr = [sprintf('mode%d', unitArgs(1)), sprintf('-%d',unitArgs(2))];
     else
-        modeStr = sprintf('mode-%s', unitArgs(1));
+        modeStr = sprintf('mode-%s', unitArgs);%(1));
     end
     
     syncedOutput = fullfile(spkPath, 'sync', sprintf('%s_%s_%s.mat', spkFile, pdsFile, modeStr));
@@ -232,7 +249,6 @@ for ss = 1:length(spkSrc)
                 %    regardless of sort method (unsorted, Plexon Offline Sorter, KiloSort...etc.)
                 sync = syncPlexon2PDS(dv.pds, dv.paths.(spkSrc{ss}) );
                 
-                
                 if isnumeric(unitArgs)
                     % load spikes from plx/pl2 file (unsorted waveforms or Offline Sort outputs)
                     dv.(spkSrc{ss}) = plx_readerPar_Pldaps(dv.paths.(spkSrc{ss}), unitArgs, sync);
@@ -250,8 +266,9 @@ for ss = 1:length(spkSrc)
                         otherwise
                             % use different kilosort output directory (e.g. merged outputs of multiple plx/pl2 files)
                             kilopath = getKiloPath(dv.paths.(spkSrc{ss}), unitArgs(1));
+                            kilopath = [string(kilopath), unitArgs(2)];
                     end
-                    
+
                     % Generate the spk output struct (finally!)
                     dv.(spkSrc{ss}) = getSpikes_kilo(kilopath, sync);
                     
@@ -270,7 +287,7 @@ for ss = 1:length(spkSrc)
         dv.(spkSrc{ss}).info.calcdate = datestr(now, 31);
         % save a pre-processed & synced mat file for faster loading in the future
         theseSpikes = dv.(spkSrc{ss});
-        eval(sprintf('save(''%s'', ''-struct'',''theseSpikes'');', dv.(spkSrc{ss}).info.preprocessed));
+        eval(sprintf('save(''%s'', ''-v7'', ''-struct'',''theseSpikes'');', dv.(spkSrc{ss}).info.preprocessed));
         fprintf('~~~\tPre-processed & synced [.%s] spike output struct saved as:\n\t\t%s\n', spkSrc{ss}, theseSpikes.info.preprocessed );
 
     end

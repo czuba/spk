@@ -1,5 +1,15 @@
-function H = addWfInset(AH, wf, u, relShift)
+function H = addWfInset(AH, wf, u, relShift, sc)
+%
 
+if nargin<5 || isempty('sc')
+    % no scaling by default
+    sc = 1;
+else
+    % Continuous raw (int16) data to mv
+    if isa(sc,'function_handle')
+        sc = sc(1);
+    end
+end
 
 if nargin<4 || isempty('relShift')
     relShift = [0 0];
@@ -55,11 +65,11 @@ if ndims(wf.mu)==3
     else
         [~,ii] = max(range(wfVals));
     end
-    wfVals = wfVals(:,ii);
-    wfValsCi = squeeze(wf.ci(:,ii,:,u));
+    wfVals = wfVals(:,ii) .* sc;
+    wfValsCi = squeeze(wf.ci(:,ii,:,u)) .* sc;
 else
-    wfVals = wf.mu(:,u);
-    wfValsCi = wf.ci(:,:,u);
+    wfVals = wf.mu(:,u) .* sc;
+    wfValsCi = wf.ci(:,:,u) .* sc;
 end
 
 % WF conf interval in red(ish)
@@ -67,12 +77,14 @@ plot(AHi, wfValsCi, 'color',[1,axcol(2:3)], 'linewidth',.5);
 hold on,
 % WF mean in black(ish)
 plot(AHi, wfVals, 'color',axcol, 'linewidth',.5);
-if range(wf.mu(:))<1
+
+wfrng = range(wf.mu(:) .* sc);
+if wfrng<1
     % wf vals in mV
-    yl = max(0.8*range(wf.mu(:)), .1);     % yl = .1; %yl = .04;
+    yl = max(0.8*wfrng, .1);     % yl = .1; %yl = .04;
 else
     % else...wf vals in arb. a/d units (3000 is good)
-    yl = min(0.8*range(wf.mu, 'all'), 800); %3000;
+    yl = min(0.8*wfrng, 800); %3000;
 end
 yt = yl/2;
 

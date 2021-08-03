@@ -7,7 +7,14 @@ function [pds, pdsPath] = pdsImport(filename, theseFields, verbosity)
 %   [filename]  Can be fullpath to PDS file, dir of PDS files to choose from, or standard PLDAPS session directory (/yyyymmdd)
 % 
 % OUTPUTS:
-%   [pds]       ...duh.
+%   [pds]       Struct of standard PDS data fields
+%               - info struct [.info] based on standard PLDAPS content
+%               - will attempt to parse additional info based on standard file naming convention:
+%                       <subject>_<yyyymmdd><alpha>_<gridLoc>-<depth>_<pdsTime>.PDS
+%                 e.g.  tbc_20190131d_M1P3-5200_1520.PDS
+%                 ...as would result from executing the following PLDAPS experiment at time 15:20
+%                       >> p = modularDemo.doRfPos_gabGrid(["tbc","d_M1P3-5200"]);
+% 
 %   [pdsPath]   fullfile path
 % 
 % 2018-10-26  TBC  Wrote it.

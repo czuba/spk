@@ -1,4 +1,4 @@
-function [rate] = calcRate_condMatrix(spkSrc, pds, late, syncID)  %, baseWin, expo)
+function [rate] = calcRate_condMatrix(spkSrc, pds, late, syncID, cm)  %, baseWin, expo)
 % function [rate] = calcRate_condMatrix(spkSrc, pds, late, syncID)  %, baseWin, expo)
 % 
 % Compute spike [rate] struct on a given [spkSrc] struct (i.e. dv.uprb) based on
@@ -33,10 +33,26 @@ if ~exist('syncID','var') || isempty(syncID)
     % Optional logical index for subset of syncs used to compute rate
     % ...best not to mess with this. Just parse/combine conditions after rate struct is returned
     syncID = [];
-elseif islogical(syncID)
-    syncID = find(syncID);
+%     % % % elseif islogical(syncID)
+%     % % %     syncID = find(syncID);
 end
 
+% allow separate condMatrix input (for multi-condMatrix experiments)
+if nargin<5 || isempty(cm)
+    cm = pds.condMatrix;
+else
+    if numel(cm)>1
+        warning('Must input a single condMatrix for rate calc')
+        keyboard
+    end
+end
+
+if isfield(cm,'indexRange')
+    % upper limit of strobed condition indices: cm.baseIndex+(0:cm.indexRange)
+    indexRange = cm.indexRange;
+else
+    indexRange = numel(cm.conditions);
+end
 
 %% Get spike data
 
@@ -47,12 +63,19 @@ rate.snr    = spkSrc.snr;
 
 %% Identify syncs from condMatrix
 baseIndex = pds.condMatrix.baseIndex;
-stimPass = spkSrc.sync.strobe(:,2)>baseIndex;
+stimPass = spkSrc.sync.strobe(:,2)>baseIndex & spkSrc.sync.strobe(:,2)<=(baseIndex+indexRange);
 if ~isempty(syncID)
-    stimPass = stimPass & ismember(spkSrc.sync.strobe(:,2)-baseIndex, syncID);
+    if islogical(syncID)
+        % syncID is logical subset of all strobes
+        stimPass = stimPass & syncID;
+    else
+        % syncID is subset of strobe **values** (i.e. NOT index numbers)
+        stimPass = stimPass & ismember(spkSrc.sync.strobe(:,2)-baseIndex, syncID);
+    end
 end
     
-stimStrobes = spkSrc.sync.strobe(stimPass, :); %...prob unused
+% unused, but passed out in [rate] struct
+stimStrobes = spkSrc.sync.strobe(stimPass, :);
 stimStrobes(:,2) = stimStrobes(:,2)-baseIndex;
 
     
@@ -78,9 +101,10 @@ end
 % % % % % 
 if isempty(late)
     % use full stimulus duration by default
-    late = [-tdur, 0] + respLatency;
+    late = [-tdur, 0];
 end
 
+late = late + respLatency;
 
 % % calc spike rate for each presentation
 % rate = calcRate(spkSrc, late, stimPass);

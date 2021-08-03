@@ -1,5 +1,8 @@
-function [dv, Hout] = rfPosAwake3d(baseName, unitArgs, addto, doFitting, varargin)
-% function [dv, Hout] = rfPosAwake3d(baseName, unitArgs, addto, doFitting, ['param1',val1, 'param2',val2, ...])
+function [dv, Hout] = rfPosAwake3dVD(baseName, unitArgs, addto, doFitting, varargin)
+% function [dv, Hout] = rfPosAwake3dVD(baseName, unitArgs, addto, doFitting, ['param1',val1, 'param2',val2, ...])
+% 
+% Alt version of rfPosAwake3d.m, for multiple viewing distances using ViewDist & condMatrix blocks for
+% multiple interleaved viewing distances within the same experimental file.
 % 
 % Inputs are getting super gangly...
 % 
@@ -160,6 +163,18 @@ baseModule = stimType{1};
 
 xyzSize = rate.condDims(1:3);
 
+viewDist = dv.pds.baseParams.display.viewdist;
+
+ii = cellfun(@(x) isfield(x,'display'), dv.pds.data);
+% just trials with a .display field
+% extract viewdist from those trials
+vd = double(ii);
+vd(ii) = cellfun(@(x) x.display.viewdist, dv.pds.data(ii));
+% other trials were same as initial, therefore [.display.viewdist] WAS NOT included during PDS data saving compression
+% - *** TODO: fix this ***
+vd(~ii) = viewDist;
+
+
 switch stimType{1}
     case 'gabors'
         doYflip = [1,-1]; % flip y-dimension when rendering texture stimuli
@@ -171,7 +186,6 @@ switch stimType{1}
     case 'dotBall'
         stimCtr = dv.pds.baseParams.(baseModule).stimCtr;
         gridSz = dv.pds.baseParams.(baseModule).gridSz;
-        viewDist = dv.pds.baseParams.display.viewdist;
         
         % %         if ndims(dv.pds.condMatrix.conditions)>3 % has [x,y,z,dir,...]
         % NOTE: Z is not transformed by gridSz, instead must pass through and add as offset (stimCtr too) to viewing distance.

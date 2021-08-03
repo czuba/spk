@@ -15,7 +15,32 @@ function spk = getSpikes_kilo(kilopath, sync)
 % defaults
 if ~exist('kilopath','var') || isempty(kilopath)
     kilopath = [];
+elseif isstring(kilopath)
+    if length(kilopath)>1
+        unitArgs = kilopath(2);
+        if isstring(unitArgs)
+            unitArgs = str2num(unitArgs);
+        end
+        kilopath = kilopath{1};
+    end
 end
+
+if ~exist('unitArgs','var')
+    unitArgs = 0;
+end
+% skip 'noise' units
+notThese = {'noise'};
+
+if unitArgs >=1
+    % skip 'unsorted' units; only 'mua' & 'good'
+    notThese = [notThese, 'unsorted'];
+end
+
+if unitArgs >=2
+    % skip 'mua' units; only 'good'
+    notThese = [notThese, 'mua'];
+end
+        
 
 % Initialize sync with PLDAPS file
 if nargin>=1 && isstruct(sync)
@@ -37,6 +62,11 @@ end
 kiloInfo = loadParamsPy( fullfile(kilopath, 'params.py'));
 % channel map (incl spatial coords of recording device)
 kiloInfo.chanMap = load(fullfile(kilopath, 'chanMap.mat'));
+% unpack chanMap if saved as struct
+if isstruct(kiloInfo.chanMap) && length(fieldnames(kiloInfo.chanMap))==1
+    jnk = fieldnames(kiloInfo.chanMap);
+    kiloInfo.chanMap = kiloInfo.chanMap.(jnk{1});
+end
 % raw dat file info
 kiloInfo.rawFile = fullfile(kilopath, kiloInfo.dat_path);   % TODO: use as destination for preprocessed [wf] struct
 if ~exist(kiloInfo.rawFile, 'file')
@@ -48,7 +78,12 @@ rawInfo = [kiloInfo.rawFile(1:end-4),'_rawInfo.mat'];
 if exist(rawInfo, 'file')
     rawInfo = load(rawInfo);
 else
-    rawInfo = [];
+    fd = dir(fullfile(kilopath,'*_rawInfo.mat'));
+    if ~isempty(fd) && length(fd)==1
+        rawInfo = load(fullfile(kilopath,fd.name));
+    else
+        rawInfo = [];
+    end
 end
 kiloInfo.rawInfo = rawInfo;
 
@@ -81,7 +116,7 @@ spikeId = double(readNPY( fullfile(kilopath, idSrc)));
 % Split the difference here while keeping some consistency with Offline Sorter
 %   0=unsorted, 1=good, 2=mua, 3+=userAlphabetical,  ...-1=noise?
 
-spk.sortId = loadSortIds;% ({'noise','good'});
+spk.sortId = loadSortIds(notThese);% ({'noise','good'});
 
 
 %% Format and trim
@@ -141,6 +176,10 @@ pars.dataDir = kilopath;           % KiloSort/Phy output folder
 % TODO: incorporate stereoprobe trodal waveform means & ci
 pars.trodality = 1;% + contains(lower(spk.info.comment), 'stereo');
 pars.chDepth = spk.info.chanMap.ycoords;
+if isfield(spk.info.rawInfo.rawInfo,'raw2v')
+    % include function handle(s) for raw data conversion (raw saved as int16)
+    pars.raw2v = spk.info.rawInfo.rawInfo.raw2v;
+end
 
 % % Most pars values have defaults best set in the loading function, but could be set manually
 % pars.wfWin = [-40 41];             % Number of samples before and after spiketime to include in waveform

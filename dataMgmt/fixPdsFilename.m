@@ -2,7 +2,7 @@ function filename = fixPdsFilename(filebase)
 
 % file name
 if nargin<1 || isempty(filebase)
-    filebase = []%
+    filebase = '_'%
 %     defarg('filebase', sprintf('%s_%s', 'kipp', datestr(now,'yyyymmdd')))
 %     filebase = cell2mat(inputdlg('rfPos File Name String     (e.g. ''<subj>_YYYYMMDDa_<gridLoc>'')', 'FileName', 1, {filebase}));
 end
@@ -21,16 +21,30 @@ elseif numel(fd)>1
 end
 
 origName = fd.name;
-bkupName = sprintf('%s.bkup%s', fd.name, datestr(now,'YYYYMMDD'));
+origPath = fd.folder;
+bkupName = sprintf('%s.bkup%s', fd.name, datestr(now,'yyyymmdd-HHMM'));
 % create backup (this carries original 'date modified' over to the backup)
 movefile(origName, bkupName);
 copyfile(bkupName, origName);
 
-% only load fields that determine file name
-pds = load(origName, '-mat', 'baseParams');
-
 fprintLineBreak;
-fprintf('Backup PDS saved at:\n\t%s\n', bkupName);
+fprintf('Backup PDS saved to:\n\t%s\n', bkupName);
+
+
+%% load all pds fields
+pds = load(origName, '-mat');%, 'baseParams');
+
+disp('pds fields')
+disp('-------------')
+disp(fieldnames(pds))
+disp('-------------')
+disp('pds byte size')
+disp('-------------')
+structfun(@(x) getByteSize(x, 'mb'), pds)
+disp('-------------')
+
+% pause to check pds contents
+keyboard
 
 
 %% Update filename params
@@ -41,9 +55,13 @@ subjStr = pds.baseParams.session.subject; % subject name
 labelStr = pds.baseParams.session.experimentSetupFile; % session label
 
 if isstring(subjStr)
-    s0 = cellstr(subjStr);
     % poll user for corrections
-    s = inputdlg(s0 , sprintf('Current file name:\t%s',curFileName), 1, s0);
+    s0 = cellstr(subjStr);
+    % dialog window options
+    dlgOpt.Resize='on';
+    dlgOpt.WindowStyle='normal';
+    dlgOpt.Interpreter='none';
+    s = inputdlg(s0 , sprintf('Current file name:  %s',curFileName), 1, s0, dlgOpt);
     % Apply to original, matching input dimensions
     subjStr = reshape(string(s), size(pds.baseParams.session.subject));
     pds.baseParams.session.subject = subjStr;
@@ -74,6 +92,12 @@ filename = sprintf('%s%s%s_%s.PDS',...
     labelStr, ...
     sessionTimeStr);
 
+fpath = fullfile(origPath, filename);
+if exist(fpath,'file')
+    [filename, fpath] = uiputfile('*.PDS','File exists(!), revise or confirm overwrite',fpath);
+    fpath = fullfile(fpath, filename);
+end
+
 %% apply filename string to original
 pds.baseParams.session.file = filename;
 
@@ -84,10 +108,14 @@ pds.baseParams.session.file = filename;
 % ~~~
 
 %% Report changes & return
-fprintf('Updates saved to:\n\t%s\n', origName)
-fprintf(2, 'Consider manual updating to:\n\t%s\n', filename);
+fprintf('Updates saved to:\n\t%s\n', fpath)
+%fprintf(2, 'Consider manual updating to:\n\t%s\n', filename);
 fprintLineBreak;
 
-save(origName, '-append', '-struct','pds')
-end
+% must resave complete pds struct to ensure correct .mat version (with compression)
+save(origName, '-v7', '-struct','pds')
+movefile(origName, fpath);
 
+%save(origName, '-append','-v7', '-struct','pds')
+
+end %main function

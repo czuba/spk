@@ -40,6 +40,7 @@ pp = inputParser();
 pp.addParameter('dataDir', pwd, @isfolder)
 pp.addParameter('fileName', []);
 pp.addParameter('dataType', 'int16');
+pp.addParameter('raw2v', []);
 pp.addParameter('nCh', []);         % Number of channels that were streamed to disk in .dat file
 pp.addParameter('trodality', 1);    % if >1, will reshape waveforms to n*wfSamples
 pp.addParameter('chDepth', []);     % depth of channel; input from spk.info.chanMap.ycoords (def 1:nCh)
@@ -117,6 +118,7 @@ sr = pars.sr; % data sample rate (default==40k Hz)
 % Slice variables for parfor
 nWf = pars.nWf;
 nCh = pars.nCh;
+raw2v = pars.raw2v;
 wfWin = [pars.wfWin(1), pars.wfWin(end)];
 ciLvls = pars.ci;
 % Processing Flags
@@ -140,6 +142,7 @@ for u = 1:nUnits
     
     % get waveform snippets from all channels
     tmpWf = getMemMapWfs(mmf, wf0, wfWin, 1:nCh);
+
     % find peak channel
     wfAmp = squeeze(range(nanmean(tmpWf,3)));
     [wfAmpMax, tmpPeakCh{u}] = max(wfAmp);
@@ -230,10 +233,10 @@ if plotSnr && doAlign
         % figure(ax(1).Parent);
         % addWfInset(ax(1), wf, u, [0,-.5]);
         if ~doAcg
-            addWfInset([spy,spx,3], wf, u)
+            addWfInset([spy,spx,3], wf, u, [], raw2v)
         else
             % plot mean waveform w/ci
-            addWfInset([spy,spx,3], wf, u)
+            addWfInset([spy,spx,3], wf, u, [], raw2v)
             % plot ACG
             sp = subplot(spy,spx,5);
             plot(sp, wf.acg.bins, wf.acg.counts(:,u), '-','color',.5*[1 1 1])
