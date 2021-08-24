@@ -39,7 +39,14 @@ if nargin <3 || isempty(verbosity)
     verbosity = 1;
 end
 
-if isfolder(filename)
+if isempty(filename)
+    pdsPath = pwd;
+    % Each recording day has its own "pds" directory auto-generated
+    if exist( fullfile(pdsPath, 'pds'), 'dir')
+        pdsPath = fullfile(pdsPath, 'pds');
+    end
+    
+elseif isfolder(filename)
     % directory specified, select w/gui
     pdsPath = filename;
     filename = [];
@@ -55,13 +62,6 @@ elseif isfile(filename)
         filename = [filename, ext];
     else
         pdsPath = pwd;
-    end
-    
-elseif isempty(filename)
-    pdsPath = pwd;
-    % Each recording day has its own "pds" directory auto-generated
-    if exist( fullfile(pdsPath, 'pds'), 'dir')
-        pdsPath = fullfile(pdsPath, 'pds');
     end
     
 else 
@@ -80,7 +80,11 @@ end
 % Load PDS file
 if ~isempty(fd)
     if length(fd)>1
-        fd = chooseFile(fd, 'Select PDS source file:');
+        [fd, ok] = chooseFile(fd, 'Select PDS source file:');
+        if ~ok
+            fprintf(2, 'No PDS files found in %s, or user canceled selection\n', pdsPath);
+            return
+        end
     end
     
     switch lower(fd.name(end-2:end))
@@ -110,6 +114,12 @@ if ~isempty(fd)
                 end
             else
                 pds = load(pdsPath, '-mat', theseFields);
+            end
+            if isa(pds,'pldaps')
+                return
+                % file saved without converting to struct output (...only expected for "trial00000" TEMP file)
+                pds = pds.save;
+                
             end
             
             try

@@ -36,7 +36,7 @@ function plxInfo = getPlxInfo(plxFilename, plotEvents)
 
 %% Defaults
 if nargin<2 || isempty(plotEvents)
-    plotEvents = 1;
+    plotEvents = 0;
 end
 
 %% General PLX info struct

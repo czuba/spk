@@ -224,6 +224,16 @@ if dosync   %nargin>=3 && isstruct(sync)
     end
 end
 
+% Exclude any untis (& related [id]) without sufficient spike rate during the trial range of interest
+% - primarily to catch junk units/noise that was not sufficiently pruned
+minSpikeCount = 100;
+drops = cellfun(@(x) length(x)<=minSpikeCount, ts);
+if any(drops)
+    fprintf(2, '~!~\tDropped %d units from raw source for insufficient spike count (<=%2.2f)\n', sum(drops),minSpikeCount);
+    ts = ts(~drops);
+    id = id(~drops);
+end
+
 %% Syncs/events  ~~disabled. just deal with spikes here & passthrough sync~~
 if 0
     % Needs to be updated to produce cell of sync event channels
