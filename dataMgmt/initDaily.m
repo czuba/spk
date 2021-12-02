@@ -202,7 +202,7 @@ for ss = 1:length(spkSrc)
             end
         end
         if isempty(fd)
-            fprintf(2, '***\tCouldn''t find likely matches for %s file:\n\t\t%s\n***\t...attempting to continue without it.\n\n', spkSrc{ss}, fullfile(thispath, ['*',baseName,'*'])); %,'/raw/'
+            fprintf(2, '***\tCouldn''t find likely matches for %s file:\n\t\t%s\n***\t...attempting to continue without it.\n\n', spkSrc{ss}, fullfile(thispath, ['*',spkBase,'*'])); %,'/raw/'
         else
             fprintf('Found %s spike data file(s):\n\t%s\n', spkSrc{ss}, fullfile(thispath, fd.name));
         end
