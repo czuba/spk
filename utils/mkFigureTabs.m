@@ -11,7 +11,7 @@ else
 end
 nTabs = length(tabNums);
 
-desktop = com.mathworks.mde.desk.MLDesktop.getInstance;
+desktop = com.mathworks.mde.desk.MLDesktop.getInstance; %#ok<JAPIMATHWORKS>
 myGroup = desktop.addGroup(grpName);
 desktop.setGroupDocked(grpName, 0);
 
@@ -21,7 +21,8 @@ desktop.setDocumentArrangement(grpName, 1, myDim)
 
 figH    = gobjects(1, nTabs);
 
-bakWarn = warning('off','MATLAB:HandleGraphics:ObsoletedProperty:JavaFrame');
+warning('off','MATLAB:HandleGraphics:ObsoletedProperty:JavaFrame');
+warning('off', 'MATLAB:ui:javaframe:PropertyToBeRemoved');
 
 for iFig = 1:nTabs
    figH(iFig) = figure(tabNums(iFig));  %'WindowStyle', 'docked');%, ...
@@ -30,7 +31,6 @@ for iFig = 1:nTabs
       set(figH(iFig), 'WindowStyle', 'docked');
 %    drawnow;
 %    pause(0.02);  % Magic, reduces rendering errors
-   set(get(handle(figH(iFig)), 'javaframe'), 'GroupName', grpName);
+   set(get(handle(figH(iFig)), 'javaframe'), 'GroupName', grpName); %#ok<*JAVFM>
 %    plot(1:10, rand(1, 10));
 end
-warning(bakWarn);

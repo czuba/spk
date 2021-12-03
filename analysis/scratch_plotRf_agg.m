@@ -3,6 +3,10 @@ function H = scratch_plotRf_agg(dvRf, saveout, withDate)
 % 
 % 
 
+% grab limits of current axes first
+%  - prior to this fxn call, be sure correct axis is active gca [& not an inset plot or info widget] 
+rfAxLims = axis(gca);
+
 if nargin<3 || isempty(withDate)
     withDate = 1;
 end
@@ -106,7 +110,7 @@ gl = gl + kron(diff(gl)./dvRf.rf.rate.condDims(1:3) ./2, [-1;1]);
 rfStimLims = gl(1:4) + 3*[-1,1,-1,1]; % make stimulus edges visible
 % rfStimLims = gl(1:4) + 1*[-1,1,-1,1]; % make stimulus edges visible
 % rfAxLims = [-3,22,-20,5];  % [-8,32,-25,10]; % a standard large area of screen
-rfAxLims = [-4,24,-23,5];  
+% rfAxLims = [-4,24,-23,5];  
 %     % Set axes lims inclusive of stim & standard
 %     ii = [1,3];     rfAxLims(ii) = min([rfStimLims(ii); rfAxLims(ii)]);
 %     ii = [2,4];     rfAxLims(ii) = max([rfStimLims(ii); rfAxLims(ii)]);

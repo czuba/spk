@@ -96,11 +96,19 @@ if ~exist('infostr','var') || isempty(infostr)
 end
 % now apply if one exists
 if exist('infostr','var') && ~isempty(infostr)
-    axes('position',[0,.002,1,.02],'visible','off');
-        % shrinking text if multiple lines
-        if contains(infostr, {sprintf('\n'),sprintf('\n\r')}), fsz = 8; end
+    infostrPos = [0,.002,1,.02];
+    % find & replace previous if already created
+    infostrAx = findobj(H, 'type','axes','tag','infostrAx');
+    if ~isempty(infostrAx)
+        delete(infostrAx)
+    end
+    infostrAx = axes('position', infostrPos, 'visible','off', 'tag','infostrAx');
+
+    % shrinking text if multiple lines
+    if contains(infostr, {sprintf('\n'),sprintf('\n\r')}), fsz = 8; end
     text(0,0, infostr, 'verticalAlignment','bottom', 'interpreter','none', 'fontsize',fsz);    
 end
+% return focus to previous axes (#doNoHarm)
 axes(ax);
 
 

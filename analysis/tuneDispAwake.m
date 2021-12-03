@@ -249,36 +249,39 @@ set(H2, 'name', [fileName,'_disp'])
 set(H3, 'name', [fileName,'_dirDisp'])
 
 % subplot arrangements
-spx = nunits;
-if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
-    spbase = 0;
-    spx = spx/2;
-else
-    spx = nunits;
-    spbase = 0;
-end
 
-if spbase==0 && nunits~=32
-    spx = 8;
-    spy = ceil(nunits/spx);
-else
-    spx = 16;
-    spy = 2;
-end
+[spx, spy, figsz, spMargin, pbaxr, spbase] = mkProbeSubplots(nunits);
 
-% plotbox aspect ratio
-pbax = [3,2,1];
-
-figHeight = 4*spy;
-figWidth = 2+3*spx;
-figsz = [figWidth, figHeight];
-
-spMargin = [.03 .025];%1/nunits
+% spx = nunits;
+% if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
+%     spbase = 0;
+%     spx = spx/2;
+% else
+%     spx = nunits;
+%     spbase = 0;
+% end
+% 
+% if spbase==0 && nunits~=32
+%     spx = 8;
+%     spy = ceil(nunits/spx);
+% else
+%     spx = 16;
+%     spy = 2;
+% end
+% 
+% % plotbox aspect ratio
+% pbaxr = [3,2,1];
+% 
+% figHeight = 4*spy;
+% figWidth = 2+3*spx;
+% figsz = [figWidth, figHeight];
+% 
+% spMargin = [.03 .025];%1/nunits
 
 % apply size formatting to [each] figure
-figureFS(H, 'portrait', figsz);
-figureFS(H2, 'portrait', figsz);
-figureFS(H3, 'portrait', figsz)
+figureFS(H, 'landscape', figsz);
+figureFS(H2, 'landscape', figsz);
+figureFS(H3, 'landscape', figsz)
 
 
 switch stimType{1}
@@ -321,7 +324,7 @@ for u = 1:nunits
     xlim(xl)
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', pbax, 'xtick',xt);
+    set(hp, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
 
     
     
@@ -340,7 +343,7 @@ for u = 1:nunits
     xlim(xl);
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', pbax, 'xtick',xt);
+    set(hp, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
     if u == 1,
         legendStr = {legendStr, 'disp'};
     end
@@ -360,7 +363,7 @@ for u = 1:nunits
     ylim(yl),   ylabel('disp', 'fontsize',8);
     xlim(xl),   xlabel('dir', 'fontsize',8);
     box off,    view(2)
-    set(gca, 'plotBoxAspectRatio',pbax, 'xtick',xt, 'ytick',yt);
+    set(gca, 'plotBoxAspectRatio',pbaxr, 'xtick',xt, 'ytick',yt);
     
     % unit/channel info in axis title text
     if mod(dv.uprb.id(u),1) == 0

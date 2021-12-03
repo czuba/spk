@@ -169,14 +169,23 @@ switch stimType{1}
             , dv.pds.condMatrix.conditions, 'uni',0);
         
     case 'dotBall'
+        % flag for depth already in visual degrees
+        depthDeg = isfield(dv.pds.condMatrix.conditions{1}, 'stimDepthDeg');
+
         stimCtr = dv.pds.baseParams.(baseModule).stimCtr;
         gridSz = dv.pds.baseParams.(baseModule).gridSz;
         viewDist = dv.pds.baseParams.display.viewdist;
+        ipd = dv.pds.baseParams.display.ipd;
         
-        % %         if ndims(dv.pds.condMatrix.conditions)>3 % has [x,y,z,dir,...]
-        % NOTE: Z is not transformed by gridSz, instead must pass through and add as offset (stimCtr too) to viewing distance.
-        condMat = cellfun(@(x) [([x.stimPos(1:2).*gridSz(1:2), x.stimPos(3)+viewDist]  + stimCtr), x.dir] ...
-            , dv.pds.condMatrix.conditions, 'uni',0);
+        if depthDeg % isfield(dv.pds.condMatrix.conditions{1}, 'stimDepthDeg')
+            % updated version with disparity offset defined in deg horizontal disparity
+            condMat = cellfun(@(x) [([x.stimPos(1:2).*gridSz(1:2), viewDist + disp2depth(60*x.stimDepthDeg, viewDist/100, ipd)] + stimCtr), x.dir], dv.pds.condMatrix.conditions, 'uni',0);
+        else
+            % %         if ndims(dv.pds.condMatrix.conditions)>3 % has [x,y,z,dir,...]
+            % NOTE: Z is not transformed by gridSz, instead must pass through and add as offset (stimCtr too) to viewing distance.
+            condMat = cellfun(@(x) [([x.stimPos(1:2).*gridSz(1:2), x.stimPos(3)+viewDist]  + stimCtr), x.dir] ...
+                , dv.pds.condMatrix.conditions, 'uni',0);
+        end
         % %         else
         % %             condMat = cellfun(@(x) [(x.stimPos .* dgridSz + stimCtr) .* doYflip, x.dir] ...
         % %                 , dv.pds.condMatrix.conditions, 'uni',0);
@@ -258,22 +267,14 @@ dv.rf.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
 % Make or find the appropriate figure
 
 % Subplot size & layout
-spbase = 0;
-spx = 8;%2;
-% % !! %   spx == 2 on unsorted data makes two subplot columns, matching unsorted stereo-probe channel config
-% % !! %   ...but resulting fig is not really viewable until after saving to [pdf/png/eps] file
-spy = ceil(nunits/spx);
+[spx, spy, figsz, spMargin, pbaxr] = mkProbeSubplots(nunits);
+%   mkProbeSubplots == scrappy attempt to standardize probe data subplotting
+%   - optional second input flag:
+%       'g' (default) produces 8-by-n grid of subplots
+%       'v' for 2-by-n vertical pairs; arranged like unsorted channels of stereoprobe
+%       'h' for n-by-2 rows; marginally more 'monitor-friendly', primarily used back in the <=16 channel days)
 
-% % Double column (native stereo-probe config)
-% figW = 8;
-% figHscale = 3;
-% figsz = [figW, nunits/spx*figHscale];%nunits*figWscale, figHeight];
-figHeight = 4*spy;
-figWidth = 2+3*spx;
-figsz = [figWidth, figHeight];
-
-spMargin = [.03 .025]; % spMargin = [.015 .015];    % spMargin = .3/nunits .* [1 1];
-
+figOri = 'landscape';
 
 % Crufty flag trying to do too much...[new figure, choose number, existing figure,...lots of edge cases]
 if isempty(addto) || ~ishandle(addto)
@@ -282,10 +283,10 @@ if isempty(addto) || ~ishandle(addto)
         if addto<0 && ishandle(abs(addto))
             close(abs(addto));
         end
-        H1 = figureFS(abs(addto), 'portrait', figsz);
+        H1 = figureFS(abs(addto), figOri, figsz);
     else
         % Open new figure
-        H1 = figureFS([], 'portrait', figsz);
+        H1 = figureFS([], figOri, figsz);
     end
     % name it
     set(H1, 'name', [fileName,'_rf'], 'tag',figDir)
@@ -416,13 +417,14 @@ gl = gl + kron(diff(gl)./xyzSize./2, [-1;1]);
 
 % plotting axes limits
 rfStimLims = gl(1:4) + 3*[-1,1,-1,1]; % make stimulus edges visible
-rfAxLims = [-3,22,-22,3];  % [-8,32,-25,10]; % a standard large area of screen
+rfAxLims = [-5,30,-30,5];  % [-8,32,-25,10]; % a standard large area of screen
 
     % Set axes lims inclusive of stim & standard
     ii = [1,3];     rfAxLims(ii) = min([rfStimLims(ii); rfAxLims(ii)]);
     ii = [2,4];     rfAxLims(ii) = max([rfStimLims(ii); rfAxLims(ii)]);
-
-    rfAxLims = rfStimLims;
+    
+    % manual override, zoom on stimulus area
+%     rfAxLims = rfStimLims;
 
 % xy grid for plotting fits
 spc = min([diff(xs);diff(ys)]);
@@ -437,7 +439,7 @@ ha = findobj(H1, 'type','axes');
 for u = 1:nunits,
 
     if isempty(addto) || addto<0 || isempty(ha)
-        sp = subplot_tight(spy, spx, u+spbase, spMargin);
+        sp = subplot_tight(spy, spx, u, spMargin);
         % tag as channel RF
         set(sp, 'tag',sprintf('ch%drf',u), 'NextPlot','add');
     else
@@ -492,7 +494,7 @@ for u = 1:nunits,
             % If multiple depth planes, plot each in separate figure/subplot
             if length(ud)>1
                 if ~exist('rfTabs', 'var')
-                    rfTabs = mkFigureTabs( (1:nunits)+100, dv.info.pdsName);
+                    rfTabs = mkFigureTabs( (1:nunits)+800, dv.info.pdsName);
                 end
                 % common color range
                 icl = prctile(dv.rf.rate.raw(:,u), [5,95], 'all');
@@ -612,7 +614,7 @@ for u = 1:nunits,
     % ...this should really be its own compartmentalized fxn.   2019: IT IS!!
     figure(H1)
     if ~isempty(dv.uprb.wf.mu)
-        addWfInset(sp, dv.uprb.wf, u);
+        addWfInset(sp, dv.uprb.wf, u, [0,-.1]); % shift inset up slightly
     end
     
     % progress
@@ -621,6 +623,9 @@ end
 fprintf('\n')
     
 drawnow
+
+% ensure focus on RF plot
+axes(sp);
 
 Hagg = scratch_plotRf_agg(dv);
 
