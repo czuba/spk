@@ -54,8 +54,8 @@ rfDepth = (siteDepth - trodeDepth)/1000;
 
 % colormaps
 % cm = colorcet('D11', 'N',nunits/2); % isoluminant colormap %colormap(winter)
-cm = colorcet('R2', 'N',nunits/2); % rainbow colormap %colormap(winter)
-cm = kron(cm,[1 1]');
+cm = colorcet('R2', 'N',nunits); % rainbow colormap %colormap(winter)
+% cm = kron(cm,[1 1]');
 
 
 
@@ -80,7 +80,7 @@ dotMin = 20;
 % rf centers
 mkSz = max([dvRf.rf.r2; 0.4])
 mkSz = (dvRf.rf.r2)./mkSz .*250+dotMin;
-hp = scatter(rfx, rfy, mkSz, cm);
+hp = scatter(rfx, rfy, mkSz, cm(1:nunits,:));
 hp.MarkerEdgeColor = 'k';
 
 % color depth
