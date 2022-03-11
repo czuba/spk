@@ -90,18 +90,22 @@ end
 
 
 %% Compile plexon file info, and load strobe event timestamps & values
-
+tic
 % General PLX info struct
 info = getPlxInfo(plxFilename);
 
-tic
-% Get strobed plexon events (Omniplex uses 'channel 257' for the strobbed events)
-[~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxFilename, plx_event_resolve_channel(plxFilename, 'Strobed'));
+% strobed plexon events loaded as standard component of plxInfo struct
+plxStrobeTs     = info.strobes(:,1);
+plxStrobeVals   = info.strobes(:,2);
 
-if plxStrobeTs == -1
-    fprintf(['\tPlexon MAP system detected. Will use hardcoded channel #257 for strobed sync signals.\n'])
-    [~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxFilename, 257);
-end
+% tic
+% % Get strobed plexon events (Omniplex uses 'channel 257' for the strobbed events)
+% [~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxFilename, plx_event_resolve_channel(plxFilename, 'Strobed'));
+% 
+% if plxStrobeTs == -1
+%     fprintf(['\tPlexon MAP system detected. Will use hardcoded channel #257 for strobed sync signals.\n'])
+%     [~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxFilename, 257);
+% end
 fprintf('\t%2.2f sec to load events from plx file:\t%s\n\n', toc, plxFilename);
 
 

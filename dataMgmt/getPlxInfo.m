@@ -32,6 +32,8 @@ function plxInfo = getPlxInfo(plxFilename, plotEvents)
 % 2018-12-02  TBC  Wrote it.
 % 2021-01-08  TBC  Added basic event loading (for determining where experiment files were run w/in longer plx files)
 %                  .plx2clock converts plx event times to [approx] real clock time (for comparison to PLDAPS file times)
+% 2022-01-26  TBC  Kilosort workaround: Allow plxInfo struct to be loaded from saved rawInfo.mat file
+%                  - Workaround for manual merging pl2 files 
 
 
 %% Defaults
@@ -39,12 +41,21 @@ if nargin<2 || isempty(plotEvents)
     plotEvents = 0;
 end
 
+
 %% General PLX info struct
 tic
 fn = {'path', 'ver', 'freq', 'comment', 'trodality', 'wfSize', 'preThresh', 'spikePeakV', 'spikeBitRes', 'slowPeakV', 'slowBitRes', 'duration', 'dateStr'};
 nfo = cell(1,length(fn));
 
-[nfo{:}] = plx_information(plxFilename);
+try
+    % load PLX file info directly
+    [nfo{:}] = plx_information(plxFilename);
+catch
+    % if fail, attempt to load plxInfo struct
+    load(plxFilename, 'plxInfo', '-mat');
+    return
+end
+
 plxInfo =  cell2struct(nfo, fn, 2);
 
 % Additional pl2 file details

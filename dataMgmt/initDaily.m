@@ -244,12 +244,12 @@ for ss = 1:length(spkSrc)
         % Synchronize PDS & Plexon file clocks and trim to valid trials
         switch lower(dv.paths.(spkSrc{ss})(end-2:end))
             case {'plx','pl2'}
-                % This sync applies to all PLDAPS-Plexon based experiment sessions
-                % -- It only operates on plexon event channels & PTB trial times, so outputs apply
-                %    regardless of sort method (unsorted, Plexon Offline Sorter, KiloSort...etc.)
-                sync = syncPlexon2PDS(dv.pds, dv.paths.(spkSrc{ss}) );
-                
                 if isnumeric(unitArgs)
+                    % This sync applies to all PLDAPS-Plexon based experiment sessions
+                    % -- It only operates on plexon event channels & PTB trial times, so outputs apply
+                    %    regardless of sort method (unsorted, Plexon Offline Sorter, KiloSort...etc.)
+                    sync = syncPlexon2PDS(dv.pds, dv.paths.(spkSrc{ss}) );
+                
                     % load spikes from plx/pl2 file (unsorted waveforms or Offline Sort outputs)
                     dv.(spkSrc{ss}) = plx_readerPar_Pldaps(dv.paths.(spkSrc{ss}), unitArgs, sync);
                     
@@ -268,6 +268,18 @@ for ss = 1:length(spkSrc)
                             kilopath = getKiloPath(dv.paths.(spkSrc{ss}), unitArgs(1));
                             kilopath = [string(kilopath), unitArgs(2)];
                     end
+
+                    % Use sync events from _rawInfo.mat file created during conversion
+                    eventPath = dir( fullfile(kilopath,'*_rawInfo.mat'));
+                    if ~isempty(eventPath)
+                        % getPlxInfo will load plxInfo struct from this mat file automatically
+                        eventPath = fullfile(eventPath.folder, eventPath.name);
+                    else
+                        % use spike source file as fallback
+                        eventPath = dv.paths.(spkSrc{ss});
+                    end
+
+                    sync = syncPlexon2PDS(dv.pds, eventPath );
 
                     % Generate the spk output struct (finally!)
                     dv.(spkSrc{ss}) = getSpikes_kilo(kilopath, sync);

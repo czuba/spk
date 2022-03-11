@@ -1,10 +1,20 @@
-function autoConvert_pl2(baseDir, loadDir, useGUI, timeRange)
-% INPUTS - baseDir -- base directory, e.g. /home/huklab/
-%          loadDir -- input directory where the pl data is
+function autoConvert_pl2(baseDir, loadDir, useGUI, contFilterMode)
+% function autoConvert_pl2(baseDir, loadDir, useGUI, contFilterMode)
 % 
-% Recommend running without any inputs. Set current working directory to folder containing a dir for each recording
+% Recommend running without any inputs:
+% Set current working directory to folder containing a dir for each recording
 % day, formatted as  ./yyyymmdd, with original spike data files in ./yyyymmdd/spk
 % Will present gui file selection windows for choosing which day, which files to sort, and corresponding chanMap to use
+% 
+% INPUTS - baseDir -- base directory, e.g. /home/huklab/
+%          loadDir -- input directory where the pl data is
+%          useGUI  -- flag to disable GUIs for scripting (def=1, show GUI file pickers where necessary)
+%          contFilterMode -- 'CMR' default & recommended (...outlier versions 1-2x slower)
+%                     - 'CAR', 'carOutliers', 'CMR', 'cmrOutliers', 'none'
+%                     - "outliers" versions fill outliers across temporal dim (spikes) with nans
+%                       before computing mean or median across channels.
+%                     - only removes outliers from stat, not from actual matrix values
+%                     - no outlier removal for temporal stat; at 20-40kHz, difference insignificant for any reasonable chunk size
 % 
 % NOTE ON CHANMAP FILES:   Needs extended version of chanMap files
 %   -- All regular Kilosort vars (chanMap, chanMap0ind...xcoords, ycoords)
@@ -19,6 +29,7 @@ function autoConvert_pl2(baseDir, loadDir, useGUI, timeRange)
 % 2019-xx-xx  TBC  Cobbled together from prior Huk Lab Kilosort1 functions
 % 2019-08-20  TBC  Cleaned & commented. Improved config & chanMap selection
 % 2022-01-19  TBC  Created from old autoSort parts
+% 2022-01-31  TBC  Converted old [timeRange] input to contFilterMode (def='CMR')
 % 
 
 
@@ -37,10 +48,16 @@ if nargin<3 || isempty(useGUI)
     useGUI = 1;
 end
 
-if nargin<4 || isempty(timeRange)
-    % use all available data by default
-    timeRange = [];
+contFilters = {'CAR', 'carOutliers', 'CMR', 'cmrOutliers', 'none'};
+if nargin<4 || isempty(contFilterMode)
+    % continuous data filter mode (def='CMR' common median referencing across channels)
+    contFilterMode = 'CMR';
+elseif ~isempty(contFilterMode) && ~ischar(contFilterMode) || (ischar(contFilterMode) && ~any(strcmpi(contFilterMode, contFilters)))
+    error(sprintf('Continuous data filter mode [contFilterMode] not recognized\nMust be one of the following: \t\t%s,\t\t%s,\t\t%s,\t\t%s\n',contFilters{:}));
 end
+
+% timeRange restriction not supported (messy & ineffective)
+timeRange = [];
 
 ok = true;
 
@@ -259,8 +276,6 @@ for iDir=1:length(theseDirs)
         %   before computing mean or median across channels.
         % - only removes outliers from stat, not from actual matrix values
         % - no outlier removal for temporal stat; at 20-40kHz, difference insignificant for any reasonable chunk size
-        % contFilterMode = 'carOutliers'; %'CMR'; % 'CMR'; %'none');   % 'CMR');
-        contFilterMode = 'CMR';
         
         % Continuous data source:   'SPKC'  
         chanMap.contSource = 'SPKC';
@@ -269,15 +284,14 @@ for iDir=1:length(theseDirs)
         else
             contSource = [];
         end
-        
-        % [timeRange] restriction NOT RECOMMENDED/abandoned
-        % - overcomplicates association with original data & event syncs
-        %forceNew = 1;   timeRange = [1250, inf];
-        
-        if ~isempty(timeRange)
-            % append time range to output filename, if defined
-            rawFileOut = sprintf('%s_t%04.0f-%04.0f', rawFileOut, timeRange);
-        end
+                
+        % %         if ~isempty(timeRange)
+        % %             % [timeRange] restriction NOT RECOMMENDED/abandoned
+        % %             % - overcomplicates association with original data & event syncs
+        % %             warning([mfilename,':timeRangeUnwise'], sprintf('[timeRange] restriction NOT RECOMMENDED/abandoned\n\t- overcomplicates association with original data & event syncs'));
+        % %             % append time range to output filename, if defined
+        % %             rawFileOut = sprintf('%s_t%04.0f-%04.0f', rawFileOut, timeRange);
+        % %         end
         
         
         forceNew = 1;
@@ -287,13 +301,13 @@ for iDir=1:length(theseDirs)
         if (forceNew || useGUI==2) || ~exist( fullfile( rawDir, [rawFileOut '.dat']), 'file')
             % create .dat raw file
             fprintf('Creating raw dat file from Plexon spikes\n');
-            rawInfo = plx2raw(thispath, b(iPL).name, rawDir, contFilterMode, contSource, timeRange, rawFileOut);    %#ok<NASGU>    %'none');   % 'CMR');    %
+            [plxInfo, rawInfo] = plx2raw(thispath, b(iPL).name, rawDir, contFilterMode, contSource, timeRange, rawFileOut);    %#ok<NASGU>    %'none');   % 'CMR');    %
             
         else
             rawInfo = fullfile( rawDir, [rawFileOut,'_rawInfo.mat']);
             if exist( rawInfo, 'file')
                 fprintf('Found existing raw dat file; loading rawInfo struct...\n');
-                rawInfo = load(rawInfo); %#ok<NASGU> 
+                load(rawInfo, '-mat', 'plxInfo','rawInfo'); 
                 
             else
                 warning('Raw file for %s already exists, but no info struct was saved for it, so I don''t know whats in there.\n Raw file should be recreated...', thisFile)
@@ -303,22 +317,22 @@ for iDir=1:length(theseDirs)
         end
         
         %% auto copy channelmaps
-        % rawdatName = fullfile(rawDir, [rawFileOut '.dat']);
-        outDir     = fullfile(spkDir, 'KiloSort', thisFile);
+        % - ks25 will also transfer these when saving, but redundancy doesn't hurt here
+        try
+            % rawdatName = fullfile(rawDir, [rawFileOut '.dat']);
+            outDir     = fullfile(spkDir, 'KiloSort', thisFile);            
+            if ~exist(outDir,'dir')
+                mkdir(outDir);
+            end
         
-        if ~exist(outDir,'dir')
-            mkdir(outDir);
-        end
-        
-        copyfile(fullfile(cm.folder, cm.name), fullfile(outDir,'chanMap.mat'));
-        
-        fprintf('Kilo Sort output dir:\n\t%s\n', outDir);
+            % place chanmap & rawInfo files in output directory
+            copyfile(fullfile(cm.folder, cm.name), fullfile(outDir,'chanMap.mat'));
+            copyfile(rawInfo.paths.rawInfo, outdir);
 
-        
-        %fprintf('~!~\tRaw dat file conversion complete. Use Kilosort GUI to process raw file:\n\t%s.dat\n', rawFileOut);
-        %return
-        
-        
+            fprintf('Kilo Sort output dir:\n\t%s\n', outDir);
+        catch
+            warning([mfilename,':ksOutputDirFail'], 'NOTE: unable to fully initialize default kilosort output dir:\t%s\n', outDir);
+        end
         
         if 1 %useGUI==2
             % Just convert raw data & save _rawInfo.mat, abort autosort so Kilosort GUI can be used
@@ -329,28 +343,10 @@ for iDir=1:length(theseDirs)
             % % %             % ----------------------------
             % % %             % This code is long out of date...needs update for "ks25" version of Kilosort
             % % %             % ----------------------------
-            % % %             if ~exist(fullfile(outDir, 'spike_times.npy'), 'file')
-            % % %                 rez = runKiloSort2(outDir, thisFile, 'pl2');
-            % % %                 fprintf('\n\tProcessing time: %3.1f min\n\t%s done.\n', toc/60, thisFile);
-            % % %             else
-            % % %                 fprintf(2, '\tKilosort has already been run for this file/path. Moving on.\n');
-            % % %             end
-            % % %
-            % % %             % Make a guess at labeling output figures....
-            % % %             H = gcf;
-            % % %             try                             %#ok<*TRYNC>
-            % % %                 set(gcf, 'name',[thisFile,'_templates'], 'tag',fullfile(rez.ops.saveDir,'figs'));
-            % % %                 figureFS(gcf, 'landscape',[8,5]);
-            % % %             end
-            % % %             try
-            % % %                 figure(H.Number-1);
-            % % %                 set(gcf, 'name',[thisFile,'_batch2batch'], 'tag',fullfile(rez.ops.saveDir,'figs'));
-            % % %                 figureFS(gcf, 'landscape',[8,5]);
-            % % %             end
             % % %
         end % ksGUI breakout        
 
-    end % n pl files within dir
+    end %  of loop through selected data files
     fprintf('\nDone with directory:  %s\n\t%d of %d remaining.\n~~~~~~~~\n', thispath, length(theseDirs)-iDir, length(theseDirs))
     
 end % n dirs
@@ -389,37 +385,11 @@ function [fd, ok] = chooseFile(fd, titl, selMode)
     end
 end %end chooseFile
 
-    function fcell = msg2fileCell(msg, starter)        % process return string to synced file/dirs
-        msg = split(msg);
-        fcell = msg(startsWith(msg, starter));
-    end
 
-% % % %% addToPathWithoutGit.m
-% % % function addToPathWithoutGit(dir, excludes, withSubdirs)
-% % %     if nargin<3 || withSubdirs
-% % %         a = genpath(dir);
-% % %         withSubdirs = ' and subdirectories';
-% % %     else
-% % %         a = dir;
-% % %         withSubdirs = [];
-% % %     end
-% % %     
-% % %     if isempty(a)
-% % %         fprintf('%s not found...attempting to continue\n', dir);
-% % %     else
-% % %         b=textscan(a,'%s','delimiter',':');
-% % %         b=b{1};
-% % %         b(~cellfun(@isempty,strfind(b,'.git')))=[];
-% % %         b(~cellfun(@isempty,strfind(b,'.svn')))=[];
-% % %         if nargin>1
-% % %             if ~iscell(excludes), excludes = {excludes}; end
-% % %             for i = 1:numel(excludes)
-% % %                 if ~isempty(excludes{i})
-% % %                     b(~cellfun(@isempty,strfind(b, excludes{i})))=[];
-% % %                 end
-% % %             end
-% % %         end
-% % %         addpath(b{:})
-% % %         disp([dir, withSubdirs, ' added to the path']);
-% % %     end
-% % % end %end addToPathWithoutGit
+%% msg2fileCell
+% process return string to synced file/dirs
+function fcell = msg2fileCell(msg, starter)
+    msg = split(msg);
+    fcell = msg(startsWith(msg, starter));
+end %end msg2fileCell
+
