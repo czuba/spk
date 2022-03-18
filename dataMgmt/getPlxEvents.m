@@ -79,31 +79,34 @@ evStruct.evNames = cellstr(evNames);
 [~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxPath, plx_event_resolve_channel(plxPath, 'Strobed'));
 
 if plxStrobeTs == -1
-    fprintf(['\tPlexon MAP system detected. Will use hardcoded channel #257 for strobed sync signals.\n'])
+    fprintf('\tPlexon MAP system detected. Will use hardcoded channel #257 for strobed sync signals.\n')
     [~, plxStrobeTs, plxStrobeVals] = plx_event_ts(plxPath, 257);
 end
 
 if plxStrobeTs == -1
-    % if STILL none found, must have used single bit events [face-palm!]
-    % - extract them individually, then leave it to user to make sense of what they've done
-    plxStrobeTs = [];
-    plxStrobeVals = [];
-    for i = find(evStruct.evcounts(:)>0 &  contains(evStruct.evNames(:),{'evt','event'},'ignorecase',1))
-        thisEv = evStruct.evNames{i};
-        evVal = str2num(thisEv(end-2:end));
-        [~, theseTs] = plx_event_ts(plxPath, plx_event_resolve_channel(plxPath, thisEv));
-        plxStrobeTs = [plxStrobeTs; theseTs];
-        plxStrobeVals = [plxStrobeVals; evVal*ones(size(theseTs))];
+    % ...if syncs DO exist, dig them out by channel
+    plxStrobeTs = [];   plxStrobeVals = [];
+    if ~any(evStruct.evcounts(:)>0 & contains(evStruct.evNames(:),{'evt','event'},'ignorecase',1))
+        fprintf(2, '~!~\n~!~\tNo sync events found for file %s\n~!~\n', plxPath);
+    else
+        % if events exist & STILL none found, may have used single bit events   [face-palm!]
+        % - extract them individually, then leave it to user to make sense of what they've done
+        for i = find(evStruct.evcounts(:)>0 &  contains(evStruct.evNames(:),{'evt','event'},'ignorecase',1))
+            evVal = plx_event_resolve_channel(plxPath, evStruct.evNames{i});    %str2num(thisEv(end-2:end));
+            [~, theseTs] = plx_event_ts(plxPath, evVal);
+            plxStrobeTs = [plxStrobeTs; theseTs];
+            plxStrobeVals = [plxStrobeVals; evVal*ones(size(theseTs))];
+        end
     end
     [plxStrobeTs, ord] = sort(plxStrobeTs);
     plxStrobeVals = plxStrobeVals(ord);
+
 end
 % fprintf('\t%2.2f sec to load events from plx file:\t%s\n', toc, plxPath);
 
 evStruct.strobes = [plxStrobeTs, plxStrobeVals];
 
 %% Post-process & info
-
 % RSTART & RSTOP
 % - hacky...start/stop event retrieval methods are super inconsistent between plx, pl2, omniplex, & map file sources
 if isPl2
@@ -134,98 +137,115 @@ else
     % get dateStr directly
       [~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, t0] = plx_information(plxPath);
 end
-
 % convert to seconds of day
 t0 = datetime(t0, 'InputFormat','MM/dd/uuuu HH:mm:ss');
 t0time = timeofday(t0);
-evStruct.plx2clock = @(x) duration(t0time + seconds(x), 'format','hh:mm:ss.SS');
 % clock time of data acquisition start [approx.]
 evStruct.t0time = t0time;
+% time conversions
+evStruct.plx2clock = @(x) duration(t0time + seconds(x), 'format','hh:mm:ss.SS');
+evStruct.plx2pldaps = @(x) duration(seconds(x), 'format','hh:mm:ss.SS'); % initialize as pass-through, updated below if PDS syncs found..
 
-% Special case: PLDAPS syncs detected
-% "High Strobes" flag for presence of PLDAPS condMatrix syncs  (condition indices partitioned into upper end of sync register)
-hasHS = any(evStruct.strobes(1:min(100,end), 2)>=2^14);
-if hasHS
-    hs1 = find(evStruct.strobes(1:min(100,end),2)>=2^14, 1, 'first');
-    if all(evStruct.strobes( hs1+(0:5), 2) >= 2^14)
-        % fprintf('\tApplying [qualitative] sync of event times to PLDAPS clock\n')
-        % !!!----------------------------------------------------------------------------------------------!!!
-        % !!! Note: this is NOT a substitute for proper data syncing, just for coarse event time plotting
-        % !!!----------------------------------------------------------------------------------------------!!!
-        % !!! syncPlexon2PDS.m should always be used for syncing for true analyses
-        % !!!----------------------------------------------------------------------------------------------!!!
-        % - First set of 6 sync values sent by PLDAPS are "unique trial identifiers":
-        %   [trial#, month, day, hour, minute, second]
-        % - values are shifted into the upper part of strobed word register by adding 2^14        
-        % PLDAPS time value that was sent in the first sync
-        t0prime = timeofday(datetime([year(t0), evStruct.strobes( hs1+(1:5), 2)'-2^14])); % strobed datetime of first sync(s)
-        % Plexon clocktime the sync was received (sync seconds + recording start clocktime)
-        s1 = evStruct.plx2clock(evStruct.strobes(hs1,1)); % plx datetime of first sync
-        % Equivalent PLDAPS clocktime that Plexon recording was started
-        t0pldaps = t0prime - seconds(evStruct.strobes(hs1,1));
-        % update t0time & conversion function handle
-        evStruct.plx2pldaps = @(x) duration(t0pldaps + seconds(x), 'format','hh:mm:ss.SS');%x + t0sec;
-    end
+
+if isempty(evStruct.strobes)
+    % No strobes detected, format for error prevention & return
+    evStruct.strobes = zeros(0,2);
 else
-    pldapsOffset = 0;
-end
 
-%% Optional plotting of event times
-if plotEvents
-    % open figure
-    figure;
-    % format subplots
-    spy = 1+hasHS; spx = 1;
-    sp = subplot(spy,spx,1);
+    % Special case: PLDAPS syncs detected
+    % "High Strobes" flag for presence of PLDAPS condMatrix syncs  (condition indices partitioned into upper end of sync register)
+    hasHS = any(evStruct.strobes(1:min(100,end), 2)>=2^14);
     if hasHS
-        sp(2) = subplot(spy,spx,2);
-        linkaxes(sp, 'x')
+        hs1 = find(evStruct.strobes(1:min(100,end),2)>=2^14, 1, 'first');
+        if all(evStruct.strobes( hs1+(0:5), 2) >= 2^14)
+            % fprintf('\tApplying [qualitative] sync of event times to PLDAPS clock\n')
+            % !!!----------------------------------------------------------------------------------------------!!!
+            % !!! Note: this is NOT a substitute for proper data syncing, just for coarse event time plotting
+            % !!!----------------------------------------------------------------------------------------------!!!
+            % !!! syncPlexon2PDS.m should always be used for syncing for true analyses
+            % !!!----------------------------------------------------------------------------------------------!!!
+            % - First set of 6 sync values sent by PLDAPS are "unique trial identifiers":
+            %   [trial#, month, day, hour, minute, second]
+            % - values are shifted into the upper part of strobed word register by adding 2^14
+            % PLDAPS time value that was sent in the first sync
+            t0prime = timeofday(datetime([year(t0), evStruct.strobes( hs1+(1:5), 2)'-2^14])); % strobed datetime of first sync(s)
+            % Plexon clocktime the sync was received (sync seconds + recording start clocktime)
+            s1 = evStruct.plx2clock(evStruct.strobes(hs1,1)); % plx datetime of first sync
+            % Equivalent PLDAPS clocktime that Plexon recording was started
+            t0pldaps = t0prime - seconds(evStruct.strobes(hs1,1));
+            % update t0time & conversion function handle
+            evStruct.plx2pldaps = @(x) duration(t0pldaps + seconds(x), 'format','hh:mm:ss.SS');%x + t0sec;
+        end
+    else
+        pldapsOffset = 0;
     end
-    
-    if exist(fullfile(fileparts(evStruct.path),'..','pds'),'dir')
-        try
-            % create background of all files run during this session
-            % get table of PDS files from this session
-            [tt, seshDat] = scanSesh([],fullfile(fileparts(evStruct.path),'..'), 1, 0);
-            % plot bands for each file
-            % - possible temporal offset btwn acquisition & stimulus computers if clocks aren't synced,
-            %   but close enough for eyeballing file time range for spike sorting
-            % PDS times from file names
-            %   p0 = timeofday(datetime(tt.pdsTime,'InputFormat','HHmm'));
-            % PDS times from file starts (incl. seconds)
-            p0 = timeofday(datetime(arrayfun(@(x) x.baseParams.session.initTime, seshDat),'ConvertFrom','datenum')); % ...there must be a more direct way, but whatever
-            p0 = sort(p0); % ...sometimes out of order depending on file sort
-            pldapsOffset = min(abs(p0-t0prime));
-            p1 = p0(:) + minutes(tt.durMin);
-            xs = [p0(:), p1.*[1,1],p0(:).*[1,1]];
-            ys = repmat([0,0,3000,3000,0],size(xs,1),1);
-            for s = 1:length(sp) % each subplot
-                fill(sp(s), seconds(xs'-t0pldaps+pldapsOffset), ys','k','facealpha',.1, 'yliminclude','off', 'xliminclude','off')
-                % p0.Format = 'hh:mm';
-                % set(gca, 'xtick',p0)
-                set(sp(s), 'nextplot','add')
+
+    % Optional plotting of event times
+    if plotEvents
+        % open figure
+        figure;
+        % format subplots
+        spy = 1+hasHS; spx = 1;
+        sp = subplot(spy,spx,1);
+        if hasHS
+            sp(2) = subplot(spy,spx,2);
+            linkaxes(sp, 'x')
+        end
+
+        if exist(fullfile(fileparts(evStruct.path),'..','pds'),'dir')
+            try
+                % create background of all files run during this session
+                % get table of PDS files from this session
+                [tt, seshDat] = scanSesh([],fullfile(fileparts(evStruct.path),'..'), 1, 0);
+                % plot bands for each file
+                % - possible temporal offset btwn acquisition & stimulus computers if clocks aren't synced,
+                %   but close enough for eyeballing file time range for spike sorting
+                % PDS times from file names
+                %   p0 = timeofday(datetime(tt.pdsTime,'InputFormat','HHmm'));
+                % PDS times from file starts (incl. seconds)
+                p0 = timeofday(datetime(arrayfun(@(x) x.baseParams.session.initTime, seshDat),'ConvertFrom','datenum')); % ...there must be a more direct way, but whatever
+                p0 = sort(p0); % ...sometimes out of order depending on file sort
+                pldapsOffset = min(abs(p0-t0prime));
+                p1 = p0(:) + minutes(tt.durMin);
+                xs = [p0(:), p1.*[1,1],p0(:).*[1,1]];
+                ys = repmat([0,0,3000,3000,0],size(xs,1),1);
+                for s = 1:length(sp) % each subplot
+                    fill(sp(s), seconds(xs'-t0pldaps+pldapsOffset), ys','k','facealpha',.1, 'yliminclude','off', 'xliminclude','off')
+                    % p0.Format = 'hh:mm';
+                    % set(gca, 'xtick',p0)
+                    set(sp(s), 'nextplot','add')
+                end
             end
         end
-    end
-    
-    %plot event times (separate high & low valued strobes; trialIDs & events, respectively)
-    ii = evStruct.strobes(:,2)>=2^14;
-    
-    % plot primary event strobes
-    plot(sp(1), seconds(evStruct.plx2clock(evStruct.strobes(~ii,1))-t0time), evStruct.strobes(~ii,2), 'g.');
-    set(sp(1), 'nextplot','add')
-    % title
-    titext = sprintf('Sync Events for\n%s',evStruct.path);
-    title(sp(1), titext, 'interp','none');
 
-    if hasHS
-        % plot PLDAPS high strobes
-        plot(sp(end), seconds(evStruct.plx2clock(evStruct.strobes(ii,1))-t0time), evStruct.strobes(ii,2)-2^14, 'bo');
-        title(sp(end), 'PLDAPS session & trial syncs', 'interp','none');
-        set(sp(end), 'nextplot','add')
+        %plot event times (separate high & low valued strobes; trialIDs & events, respectively)
+        ii = evStruct.strobes(:,2)>=2^14;
+
+        % plot primary event strobes
+        plot(sp(1), seconds(evStruct.plx2clock(evStruct.strobes(~ii,1))-t0time), evStruct.strobes(~ii,2), 'g.');
+        set(sp(1), 'nextplot','add')
+        % title
+        titext = sprintf('Sync Events for\n%s',evStruct.path);
+        title(sp(1), titext, 'interp','none');
+        
+        if hasHS
+            % plot PLDAPS high strobes
+            plot(sp(end), seconds(evStruct.plx2clock(evStruct.strobes(ii,1))-t0time), evStruct.strobes(ii,2)-2^14, 'bo');
+            title(sp(end), 'PLDAPS session & trial syncs', 'interp','none');
+            set(sp(end), 'nextplot','add')
+        end
+        makeAxisClean(sp);
+        drawnow
     end
-    drawnow
 end
 
 end %main function
 
+
+function makeAxisClean(ax)
+    for i = ax(:)'
+        set(i, 'box','off')
+        axis(i, 'tight');
+        axis(i, axis(i) + .02*[-1 1 -1 1] .* kron([diff(xlim(i)),diff(ylim(i))], [1 1]));
+    end
+end
