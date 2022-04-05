@@ -614,7 +614,7 @@ for u = 1:nunits,
     % ...this should really be its own compartmentalized fxn.   2019: IT IS!!
     figure(H1)
     if ~isempty(dv.uprb.wf.mu)
-        addWfInset(sp, dv.uprb.wf, u, [0,-.1]); % shift inset up slightly
+        addWfInset(sp, dv.uprb.wf, u, [0,-.1], dv.uprb.info); % shift inset up slightly
     end
     
     % progress

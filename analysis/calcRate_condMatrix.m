@@ -83,7 +83,9 @@ stimStrobes(:,2) = stimStrobes(:,2)-baseIndex;
 % This looks convoluted, but just takes diff of onset & offset time
 % for each matrixModule, then confirms that all are the same
 % - duration (sec) of each condMatrix module presentation [.modOnDur]
-tdur = cellfun(@(x) double(diff(pds.baseParams.(x).modOnDur)), pds.condMatrix.modNames.matrixModule);
+tdur = cellfun(@(x) double(round(diff(pds.baseParams.(x).modOnDur), 6)), pds.condMatrix.modNames.matrixModule);
+% - round tdur to microseconds (for rounding error robustness)
+tdur = round(tdur,6);
 assert(all(tdur==tdur(1)), '%s is not compatible with unequal matrix module durations;\ncode an alternative or parse separate rate structs for each duration.\n\ttdur = %s;\n',mfilename,mat2str(tdur));
 tdur = tdur(1);
 

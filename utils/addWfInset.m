@@ -4,11 +4,16 @@ function H = addWfInset(AH, wf, u, relShift, sc)
 if nargin<5 || isempty(sc)
     % no scaling by default
     sc = 1;
-else
-    % Continuous raw (int16) data to mv
-    if isa(sc,'function_handle')
-        sc = sc(1);
+elseif isa(sc,'struct')
+    % standard "dv.uprb.info" struct
+    if isfield(sc,'dat_path') && isfield(sc,'rawInfo')
+        % pull conversion fxn from inside [messy] hierarchy
+        sc = sc.rawInfo.rawInfo.raw2v;
     end
+end
+% Continuous raw (int16) data to mv
+if isa(sc,'function_handle')
+    sc = sc(1);
 end
 
 if nargin<4 || isempty(relShift)
@@ -105,7 +110,7 @@ else
 end
 set(AHi, 'linewidth',0.5, 'plotboxaspectRatio',[3,2,1],...
     'ytick',yt, 'ylim',yl*[-.55,.55],...
-    'xlim',[1,size(wf.mu,1)], 'xticklabel',[]);
+    'xlim',[1,size(wf.mu,1)], 'xticklabel',[], 'ticklength',[.03 .015]);
 
 if ndims(wf.mu)==3
     % Kilosort output with nCh waveforms per unit
