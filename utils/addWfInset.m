@@ -1,7 +1,7 @@
 function H = addWfInset(AH, wf, u, relShift, sc)
 %
 
-if nargin<5 || isempty('sc')
+if nargin<5 || isempty(sc)
     % no scaling by default
     sc = 1;
 else
@@ -11,7 +11,7 @@ else
     end
 end
 
-if nargin<4 || isempty('relShift')
+if nargin<4 || isempty(relShift)
     relShift = [0 0];
 end
 
@@ -82,11 +82,14 @@ wfrng = range(wf.mu(:) .* sc);
 if wfrng<1
     % wf vals in mV
     yl = max(0.8*wfrng, .1);     % yl = .1; %yl = .04;
+    % adjust yticks, round to 1 sigfigs
+    yt = round((yl/2)*[-1,0,1], 1,'significant');
 else
     % else...wf vals in arb. a/d units (3000 is good)
     yl = min(0.8*wfrng, 800); %3000;
+    % adjust yticks, round to 2 sigfigs
+    yt = round((yl/2)*[-1,0,1], 2,'significant');
 end
-yt = yl/2;
 
 % Axes formatting
 box off
@@ -101,12 +104,11 @@ else
     %lh = legend({'ci','mean'}, 'fontsize',6, 'box','off');
 end
 set(AHi, 'linewidth',0.5, 'plotboxaspectRatio',[3,2,1],...
-    'ytick',yt*[-1,0,1], 'ylim',yl*[-.55,.55],...
+    'ytick',yt, 'ylim',yl*[-.55,.55],...
     'xlim',[1,size(wf.mu,1)], 'xticklabel',[]);
 
 if ndims(wf.mu)==3
     % Kilosort output with nCh waveforms per unit
-    yt = yt*[-1,0,1];
     ytl = vec2tick(yt);
     ytl{2} = sprintf(' ch%d',ii);
     if isInset

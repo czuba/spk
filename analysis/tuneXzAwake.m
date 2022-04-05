@@ -187,8 +187,8 @@ dv.tune.stimType = stimType;
 dv.tune.rate = rate;
 dv.tune.dirs = dirs;
 dv.tune.tr = tr;
-dv.tune.trMu = squeeze(nanmean(tr));
-dv.tune.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
+dv.tune.trMu = squeeze(mean(tr,'omitnan'));
+dv.tune.ctZ = squeeze(mean(ct,'omitnan'))./squeeze(std(ct,'omitnan'));
 dv.tune.commonParams = commonParams;
 
 % % % ------------------------------------

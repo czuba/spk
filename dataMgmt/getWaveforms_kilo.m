@@ -144,7 +144,7 @@ for u = 1:nUnits
     tmpWf = getMemMapWfs(mmf, wf0, wfWin, 1:nCh);
 
     % find peak channel
-    wfAmp = squeeze(range(nanmean(tmpWf,3)));
+    wfAmp = squeeze(range(mean(tmpWf,3,'omitnan')));
     [wfAmpMax, tmpPeakCh{u}] = max(wfAmp);
     
     if doAlign
@@ -163,11 +163,11 @@ for u = 1:nUnits
     % Retrieve [aligned] waveforms from ALL channels
     tmpWf = getMemMapWfs(mmf, wf0, wfWin, 1:nCh);
     % confirm peak channel (shouldn't change, but ensure consistent with output)
-    wfAmp = squeeze(range(nanmean(tmpWf,3)));
+    wfAmp = squeeze(range(mean(tmpWf,3),'omitnan'));
     [wfAmpMax, tmpPeakCh{u}] = max(wfAmp);
 
     % Compute mean & conf. intervals on waveform
-    tmpMu{u} = nanmean(tmpWf, 3);
+    tmpMu{u} = mean(tmpWf, 3,'omitnan');
     tmpCi{u} = quantile(tmpWf, ciLvls, 3);
     
     if doAlign

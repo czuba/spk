@@ -244,9 +244,9 @@ dv.examp.rate = rate;
 %     dv.rf.zs = zs;
 % dv.rf.tr = tr;
 % 
-% dv.rf.trMu = squeeze(nanmedian(tr));
-% dv.rf.trVar = squeeze(nanvar(tr));
-% dv.rf.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
+% dv.rf.trMu = squeeze(median(tr,'omitnan'));
+% dv.rf.trVar = squeeze(var(tr,'omitnan'));
+% dv.rf.ctZ = squeeze(mean(ct,'omitnan'))./squeeze(std(ct,'omitnan'));
 
 
 

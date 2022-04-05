@@ -136,6 +136,11 @@ ptbUNum = cell2mat(cellfun(@(X) X.unique_number, PDS.data, 'uni',0)');
 uNumStrobes = find(plxStrobeVals>=2^14);    % identify components of unique number strobes by having values >2^14
 %         % Hacky fix if need to work OTF:
 %         %  uNumStrobes = uNumStrobes(end+1-numel(ptbUNum):end);
+if rem(numel(uNumStrobes),6)
+    fprintf(2, '/t~!~\nQuantity of unique number strobes is not divisible by 6,\nlikely a crashed file.\n\nAttempting to continue after trimming syncs...\n\t~!~\n');
+    jnk = numel(uNumStrobes);
+    uNumStrobes = uNumStrobes(1:(jnk-rem(jnk,6)));
+end
 uNumStrobes = reshape(uNumStrobes, [6,numel(uNumStrobes)/6])';  % reshape into "sixlets" as they were sent
 plxUNum = plxStrobeVals(uNumStrobes);
 
@@ -212,7 +217,7 @@ plxTrialEnd = plxStrobeTs(plxStrobeVals==PDS.baseParams.event.TRIALEND);
 if verbose
     % plot sync drift between devices
     lw = 2;
-    figure;
+    figure(999); clf
     hold on
     % Datapixx to Plexon error (in grey;  AWK: must convert Plexon syncs back to native Plexon time for comparison with Datapixx time)
     reconErrorPLX = ( ptb2plx(plxTrialStart) - dpx2plx(dpxTrialStart) )*1000; %ms 

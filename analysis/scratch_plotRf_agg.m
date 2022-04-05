@@ -59,8 +59,10 @@ cm = colorcet('R2', 'N',nunits); % rainbow colormap %colormap(winter)
 
 
 
-% Plot rfFit contour
-H = figureFS([],'portrait',[8,8]);
+% Plot aggregate RFs
+figSz = [10 10];
+
+H = figureFS([],'portrait',figSz);
 if isfield(dvRf.paths,'figs')
     figDir = dvRf.paths.figs;
 else
@@ -71,6 +73,7 @@ set(H, 'name', sprintf('%s_rfAgg',siteName), 'tag',figDir); %dvRf.paths.figs);
 % add stim location grid to last image
 plot( dvRf.rf.xyz(:,1), dvRf.rf.xyz(:,2), 'o','color',.32*[1 1 1], 'markersize',3)
 hold on, axis equal
+set(gca, 'tag','rfAgg')
 colormap(cm)
 % c50 = .75*[1 1 1];
 lw = .5;
@@ -78,6 +81,7 @@ fsz = 12;
 dotMin = 20;
 
 % rf centers
+% - dot size is scaled to 2D RF fit quality (better fit == larger dot)
 mkSz = max([dvRf.rf.r2; 0.4])
 mkSz = (dvRf.rf.r2)./mkSz .*250+dotMin;
 hp = scatter(rfx, rfy, mkSz, cm(1:nunits,:));

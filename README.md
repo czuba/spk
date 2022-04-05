@@ -66,3 +66,15 @@ Ephys spike loading &amp; analysis tools (Matlab, PLDAPS, Plexon, Kilosort...)
 
 
 
+
+
+---
+
+
+
+**Development & Attribution**
+
+Unless otherwise stated, all code written & developed by:
+Thaddeus B. Czuba, 200x-2022
+https://visualstimul.us
+

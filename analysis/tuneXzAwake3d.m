@@ -3,6 +3,7 @@ function [dv] = tuneXzAwake3d(filebase, unitArgs, saveout, rfFigH)
 
 if evalin('caller', sprintf('exist(''figDir'',''var'') && ~isempty(figDir)'))
     figDir = evalin('caller', 'figDir')     %#ok<*NOPRT>
+    
 end
 % % Push [figDir] upstream
 % figDir = '~/Dropbox/Science/projects/3dViewDist/kipp/figs';
@@ -27,7 +28,7 @@ end
 % save figs
 defarg('saveout',nan)
 
-if saveout>0 || ishandle(saveout)
+if (saveout>0 || ishandle(saveout)) && (nargin<4 || isempty(rfFigH))
     rfFigH = saveout;
 elseif nargin<4 || isempty(rfFigH)
     rfFigH = [];
@@ -205,8 +206,8 @@ dv.tune.stimType = stimType;
 dv.tune.rate = rate;
 dv.tune.dirs = dirs;
 dv.tune.tr = tr;
-dv.tune.trMu = squeeze(nanmean(tr));
-dv.tune.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
+dv.tune.trMu = squeeze(mean(tr,'omitnan'));
+dv.tune.ctZ = squeeze(mean(ct,'omitnan'))./squeeze(std(ct,'omitnan'));
 dv.tune.commonParams = commonParams;
 
 % % % ------------------------------------
@@ -220,45 +221,51 @@ if ishandle(saveout)    % saveout>0 && ishandle(saveout)
     H = saveout;
     figure(H); % make active
     spbase = nunits;
+elseif isnumeric(saveout) && saveout~=0  %saveout<-1
+    hNum = abs(saveout);
+    H = figure(hNum);
 else
     H = figure;
     spbase = 0;
 end
 
 if isempty( get(H, 'name'))
-    set(H, 'name', [fileName,'_tune'])
+    set(H, 'name', [fileName,'_tune'], 'tag',figDir)
 end
 
 % subplot arrangements
-spx = nunits;
-if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
-    spbase = 0;
-    spx = spx/2;
-end
+% spx = nunits;
+% if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
+%     spbase = 0;
+%     spx = spx/2;
+% end
+% 
+% if spbase==0 && nunits~=32
+%     spx = 8;
+%     spy = ceil(nunits/spx);
+% else
+%     spx = 16;
+%     spy = 2;
+% end
 
-if spbase==0 && nunits~=32
-    spx = 8;
-    spy = ceil(nunits/spx);
-else
-    spx = 16;
-    spy = 2;
-end
+% % plotbox aspect ratio
+% pbax = [1 1 1]; %for polar plots  [3,2,1];
 
-% plotbox aspect ratio
-pbax = [1 1 1]; %for polar plots  [3,2,1];
+% figHeight = 8;
+% figWscale = 2;
+% figsz = [nunits*figWscale, figHeight];
 
-% % figHeight = 8;
-% % figWscale = 2;
-% % figsz = [nunits*figWscale, figHeight];
+% figHeight = 4*spy;
+% figWidth = 2+3*spx;
+% figsz = [figWidth, figHeight];
 
-figHeight = 4*spy;
-figWidth = 2+3*spx;
-figsz = [figWidth, figHeight];
+% spMargin = [.03 .025];   %1/nunits
 
-spMargin = [.03 .025];   %1/nunits
+[spx, spy, figsz, spMargin, pbaxr, spbase] = mkProbeSubplots(nunits);
+figOri = 'landscape';
 
 % apply size formatting to [each] figure
-figureFS(H, 'portrait', figsz);
+figureFS(H, figOri, figsz);
 
 
 switch stimType{1}
@@ -341,7 +348,12 @@ for u = 1:nunits
             end
         end
         rticks = unique(round2(max([trTmp2(:); trTmp3(:)])*[0.5,1], 5));
-        set(hp, 'ThetaTick',[0:45:360], 'RTick', rticks)        
+        % impose minimum radius plotting limits
+        % - prevent near-zero firing rates from visually dominating plots
+        rlim = get(hp,'rlim');
+        rlim(2) = max([rlim(2), 12]);
+        
+        set(hp, 'ThetaTick',[0:45:360], 'RTick', rticks, 'Rlim',rlim)
 
         if u == nunits
             lh = legend(legendStr, 'Location','south','orientation','horizontal','FontSize',10,'LineWidth',2);
@@ -402,7 +414,7 @@ for u = 1:nunits
         end
 
         
-    % draw stim loc on rf plot
+        %% draw stim loc on rf plot
     try % prevent error crash if no associated rf plot
         stimPos = [commonParams.pos(1:2), commonParams.sz];
         ha = findobj(figure(rfFigH), 'type','axes','tag',sprintf('ch%drf',u));
@@ -413,13 +425,20 @@ for u = 1:nunits
         % Draw contours for gabor contrast envelope at [0.2, 0.5, 0.95] intensity
         gw = commonParams.sz; % stim fwhm    tstStim(3)/2.355;
         gww = gw*1.2; gx = linspace(-gww,gww,100); [gx,gy] = meshgrid(gx, gx); gg = zeros(size(gx)); gg(:) = hypot(gx(:), gy(:));   % gauss2D_R(gx, gy, gw, gw, 0, 1);
-        contour(ha, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linewidth',1.5, 'linestyle','--');
-        
-        %         uistack(ha, 'bottom')
+        contour(ha, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linestyle','-', 'linewidth',1.5);
+        % attempt to add contour to aggregate rf figure
+        if u==1
+            aggAx = findobj(figure(rfFigH+1), 'type','axes');
+            aggAx = aggAx(contains(get(aggAx,'tag'),'rfAgg'));
+            if length(aggAx)==1
+                set(aggAx, 'NextPlot','add');
+                contour(aggAx, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linestyle','--', 'linewidth',2);
+            end
+        end
         set(ha, 'clim',hacl);
         drawnow nocallbacks
     end
-    
+
     figure(H);
     % add waveform inset
     if ~isempty(dv.uprb.wf.mu)

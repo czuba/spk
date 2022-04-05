@@ -217,7 +217,7 @@ zs = unique(xyz(:,3),'stable');
 
 % trial count in each condition
 ntr = reshape(hist(xyzi, length(xyz)), xyzSize);
-[ct tr] = deal(nan([mmax(ntr), xyzSize, nunits]));
+[ct, tr] = deal(nan([mmax(ntr), xyzSize, nunits]));
 sz = size(ct);
 
 for i = 1:length(xyz)
@@ -240,9 +240,9 @@ dv.rf.xyz = xyz;
     dv.rf.zs = zs;
 dv.rf.tr = tr;
 
-dv.rf.trMu = squeeze(nanmedian(tr));
-dv.rf.trVar = squeeze(nanvar(tr));
-dv.rf.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
+dv.rf.trMu = squeeze(median(tr,'omitnan'));
+dv.rf.trVar = squeeze(var(tr,'omitnan'));
+dv.rf.ctZ = squeeze(mean(ct,'omitnan'))./squeeze(std(ct,'omitnan'));
 
 % % % % 
 %% TODO:
@@ -315,7 +315,7 @@ imU = num2cell(dv.rf.trMu, iDims);
 trMu = squeeze(num2cell(dv.rf.trMu, iDims));
 xyzMat = dv.rf.xyz;
 trVar = squeeze(num2cell(dv.rf.trVar, iDims));
-trVarMu = cellfun(@(x) nanmean(x(:)), trVar);
+trVarMu = cellfun(@(x) mean(x(:),'omitnan'), trVar);
 
 %   mmxy = trMx(:,:,u);
 mmxy = squeeze(num2cell(trMx, iDims))';
@@ -602,7 +602,7 @@ for u = 1:nunits,
         else
             tialign = 'center';
         end
-        set(ht,'horizontalalignment','center')
+        set(ht,'horizontalalignment',tialign)
 
     elseif u==nunits
         % add stim location grid to last image

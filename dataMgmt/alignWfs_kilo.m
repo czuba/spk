@@ -42,7 +42,7 @@ for i = 1:length(wfi)
     ii = (1:nsamp)+minPt-minAmp(i); % trough-aligned insertion point
     wfmu(i, ii) = wf(wfi(i),:);
 end
-wfmu = nanmean(wfmu(:, minPt+1:end-minPt));
+wfmu = mean(wfmu(:, minPt+1:end-minPt),'omitnan');
 wfmu(isnan(wfmu)) = 0;
 
 % find align shifts

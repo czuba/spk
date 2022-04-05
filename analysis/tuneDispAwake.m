@@ -3,7 +3,10 @@ function [dv] = tuneDispAwake(filebase, unitArgs, saveout, rfFigH)
 
 if evalin('caller', sprintf('exist(''figDir'',''var'') && ~isempty(figDir)'))
     figDir = evalin('caller', 'figDir')     %#ok<*NOPRT>
+else
+    figDir = []; % empty if unset...default to pwd could get messy
 end
+
 % % Push [figDir] upstream
 % figDir = '~/Dropbox/Science/projects/3dViewDist/kipp/figs';
 %     evalin('caller', sprintf('figDir = ''%s''', figDir))
@@ -212,8 +215,8 @@ dv.tune.condPars = condPars;
     dv.tune.disps = depth2disp(ds, dv.pds.baseParams.display.viewdist/100, dv.pds.baseParams.display.ipd)/60;
     dv.tune.dirs = ms;
 dv.tune.tr = tr;
-dv.tune.trMu = squeeze(nanmean(tr));
-dv.tune.ctZ = squeeze(nanmean(ct))./squeeze(nanstd(ct));
+dv.tune.trMu = squeeze(mean(tr,'omitnan'));
+dv.tune.ctZ = squeeze(mean(ct,'omitnan'))./squeeze(std(ct,'omitnan'));
 dv.tune.commonParams = commonParams;
 
 % % % ------------------------------------
@@ -228,61 +231,31 @@ if ishandle(saveout)    % saveout>0 && ishandle(saveout)
     H = figure(saveout);
     H2 = figure(saveout+1);
     H3 = figure(saveout+2);
-    spbase = nunits;
-elseif saveout<-1
+    % spbase = nunits;  % depricated
+elseif isnumeric(saveout) && saveout~=0
     hNum = abs(saveout);
     H = figure(hNum);
     H2 = figure(hNum+1);
     H3 = figure(hNum+2);
-    spbase = 0;    
 else
     H = figure(400);
     H2 = figure(401);
     H3 = figure(402);
-    spbase = 0;
 end
 
 if isempty( get(H, 'name'))
-    set(H, 'name', [fileName,'_mot'])
+    set(H, 'name', [fileName,'_mot'], 'tag',figDir)
 end
-set(H2, 'name', [fileName,'_disp'])
-set(H3, 'name', [fileName,'_dirDisp'])
+set(H2, 'name', [fileName,'_disp'], 'tag',figDir)
+set(H3, 'name', [fileName,'_dirDisp'], 'tag',figDir)
 
 % subplot arrangements
-
 [spx, spy, figsz, spMargin, pbaxr, spbase] = mkProbeSubplots(nunits);
-
-% spx = nunits;
-% if isempty(findobj(H, 'type','axes','tag',sprintf('ch%drf',1)))
-%     spbase = 0;
-%     spx = spx/2;
-% else
-%     spx = nunits;
-%     spbase = 0;
-% end
-% 
-% if spbase==0 && nunits~=32
-%     spx = 8;
-%     spy = ceil(nunits/spx);
-% else
-%     spx = 16;
-%     spy = 2;
-% end
-% 
-% % plotbox aspect ratio
-% pbaxr = [3,2,1];
-% 
-% figHeight = 4*spy;
-% figWidth = 2+3*spx;
-% figsz = [figWidth, figHeight];
-% 
-% spMargin = [.03 .025];%1/nunits
 
 % apply size formatting to [each] figure
 figureFS(H, 'landscape', figsz);
 figureFS(H2, 'landscape', figsz);
 figureFS(H3, 'landscape', figsz)
-
 
 switch stimType{1}
     case 'gabors'
@@ -291,12 +264,21 @@ switch stimType{1}
         dirs2d = dirs(dd,1);
         
     case 'dotBall'
-        %         dd = dirs(:,2)==90;
         dirs2d = dv.tune.dirs;
         disps = dv.tune.disps;
 end
 
+% colormap for DirDisp tuning surface
+try
+    cm = colorcet('L17'); % standard for DirDisp tuning (...helps to distinguish from RFpos plots)
+catch
+    cm = parula; % matlab default
+end
+% apply to figure
+colormap(H3, cm);
 
+
+%% Process & plot each unit
 legendStr = {};
 for u = 1:nunits
 
@@ -319,12 +301,11 @@ for u = 1:nunits
         ph = plot([0;dirs2d([1:end])], trTmp(D,[end,1:end]), '.-');
         %  plh = polarplot(d2r(dirsXz([end,1:end])), trTmp([end,1:end]),'.-');
     end
-    hp = gca;
     ylim(yl)
     xlim(xl)
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
+    set(sp, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
 
     
     
@@ -338,13 +319,12 @@ for u = 1:nunits
         ph = plot(disps, trTmp(:,D), '.-');
         %  plh = polarplot(d2r(dirsXz([end,1:end])), trTmp([end,1:end]),'.-');
     end
-    hp = gca;
     ylim(yl);
     xlim(xl);
     curveColor = get(ph, 'color');
     box off
-    set(hp, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
-    if u == 1,
+    set(sp2, 'plotBoxAspectRatio', pbaxr, 'xtick',xt);
+    if u == 1
         legendStr = {legendStr, 'disp'};
     end
     
@@ -360,10 +340,14 @@ for u = 1:nunits
     sp3 = subplot_tight(spy, spx, u+spbase, spMargin);
     hold on;
     surf(xx, yy, trTmp(:,[end,1:end]), 'linestyle','none');%, 'FaceColor','interp');
-    ylim(yl),   ylabel('disp', 'fontsize',8);
-    xlim(xl),   xlabel('dir', 'fontsize',8);
     box off,    view(2)
     set(gca, 'plotBoxAspectRatio',pbaxr, 'xtick',xt, 'ytick',yt);
+    xlim(xl);   xlabel('dir', 'fontsize',8);
+    ylim(yl);
+    % ylabel only on first plot of each row
+    if mod(u,spx)==1
+        ylabel('disp', 'fontsize',8);
+    end
     
     % unit/channel info in axis title text
     if mod(dv.uprb.id(u),1) == 0
@@ -384,10 +368,14 @@ for u = 1:nunits
             
     if u==1
         titext = {sprintf('%s\t%s ', fileName, dv.uprb.info.comment), titext}; %#ok<*AGROW>
+        tialign = 'left';
+    else
+        tialign = 'center';
     end
-    ht = title(sp, titext, 'fontsize',10, 'fontweight','normal', 'interpreter','none');
-    ht = title(sp2, titext, 'fontsize',10, 'fontweight','normal', 'interpreter','none');
-    ht = title(sp3, titext, 'fontsize',10, 'fontweight','normal', 'interpreter','none');
+    ht = title(sp, titext,  'fontsize',10, 'fontweight','normal', 'horizontalalignment',tialign, 'interpreter','none');
+    ht = title(sp2, titext, 'fontsize',10, 'fontweight','normal', 'horizontalalignment',tialign, 'interpreter','none');
+    ht = title(sp3, titext, 'fontsize',10, 'fontweight','normal', 'horizontalalignment',tialign, 'interpreter','none');
+    
     
     
     %% draw stim loc on rf plot
@@ -401,22 +389,35 @@ for u = 1:nunits
         % Draw contours for gabor contrast envelope at [0.2, 0.5, 0.95] intensity
         gw = commonParams.sz; % stim fwhm    tstStim(3)/2.355;
         gww = gw*1.2; gx = linspace(-gww,gww,100); [gx,gy] = meshgrid(gx, gx); gg = zeros(size(gx)); gg(:) = hypot(gx(:), gy(:));   % gauss2D_R(gx, gy, gw, gw, 0, 1);
-        contour(ha, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linewidth',1);
-        
+        contour(ha, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linestyle','-', 'linewidth',1.5);
+        % attempt to add contour to aggregate rf figure
+        if u==1
+%             try
+                aggAx = findobj(figure(rfFigH+1), 'type','axes');
+                aggAx = aggAx(contains(get(aggAx,'tag'),'rfAgg'));
+                if length(aggAx)==1
+                    set(aggAx, 'NextPlot','add');
+                    contour(aggAx, gx+stimPos(1), gy+stimPos(2), gg, gw/2*[1 1], 'color',curveColor, 'linestyle','--', 'linewidth',2);
+                end 
+%             end
+        end
         set(ha, 'clim',hacl);
         drawnow nocallbacks
     end
     
-    figure(H2);
+    figure(H3);
     % add waveform inset
     if ~isempty(dv.uprb.wf.mu)
-        addWfInset(hp, dv.uprb.wf, u);
+        addWfInset(sp3, dv.uprb.wf, u, [0,-.1]); % shift inset up slightly  );
     end
     
     drawnow nocallbacks
     % progress
     fprintf('.')
 end
+
+figure(H3);
+
 fprintf('\n')
 % saveFigTriplet(1, get(gcf,'name'), 0)
 

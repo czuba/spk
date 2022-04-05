@@ -28,6 +28,8 @@ if ((length(baseline)) > 1)
   baseline = mean(baseline);
 end
 
+oriR  = ori .* (pi/180);
+
 RDnum = 0;
 IDnum = 0;
 ROnum = 0;
@@ -35,14 +37,14 @@ IOnum = 0;
 RQnum = 0;
 IQnum = 0;
 denom = 0;
-	
-for I=1:length(response)
-  y = cos(ori(I)*.01745329);
-  x = sin(ori(I)*.01745329);
-  w = cos(2*ori(I)*.01745329);
-  v = sin(2*ori(I)*.01745329);
-  p = cos(4*ori(I)*.01745329);
-  q = sin(4*ori(I)*.01745329);
+
+for I = 1:length(response)
+  y = cos(oriR(I));
+  x = sin(oriR(I));
+  w = cos(2*oriR(I));
+  v = sin(2*oriR(I));
+  p = cos(4*oriR(I));
+  q = sin(4*oriR(I));
   RDnum = RDnum + (response(I) - baseline)* y;
   IDnum = IDnum + (response(I) - baseline)* x;
   ROnum = ROnum + (response(I) - baseline)* w;
@@ -55,7 +57,7 @@ end
 Realdir = RDnum/denom;
 Imdir = IDnum/denom;
 dirbias = sqrt(Realdir^2 + Imdir^2);
-dirpref = (57.29577951 * atan2(Imdir, Realdir));
+dirpref = (180/pi * atan2(Imdir, Realdir));
 if (dirpref < 0)
   dirpref = dirpref + 360;
 end
@@ -67,7 +69,7 @@ else
     Realori = ROnum/denom;
     Imori = IOnum/denom;
     oribias = sqrt(Realori^2 + Imori^2);
-    oripref = .5 * (57.29577951 * atan2(Imori, Realori));
+    oripref = .5 * (180/pi * atan2(Imori, Realori));
 %     if (oripref < 0)
 %         oripref = oripref + 360;
 %     end
@@ -79,7 +81,7 @@ else
         Realq = RQnum/denom;
         Imq = IQnum/denom;
         quadbias = sqrt(Realq^2 + Imq^2);
-        quadpref = .25 * (57.29577951 * atan2(Imq, Realq));
+        quadpref = .25 * (180/pi * atan2(Imq, Realq));
         if (quadpref < 0)
             quadpref = quadpref + 360;
         end

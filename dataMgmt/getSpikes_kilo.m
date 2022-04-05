@@ -28,8 +28,8 @@ end
 if ~exist('unitArgs','var')
     unitArgs = 0;
 end
-% skip 'noise' units
-notThese = {'noise'};
+% skip 'noise' & 'bad' units
+notThese = {'noise', 'bad'};
 
 if unitArgs >=1
     % skip 'unsorted' units; only 'mua' & 'good'
@@ -236,7 +236,7 @@ try
             drawnow
             [~,srcFile] = fileparts(sync.info.pdsSrc);
             set(gcf, 'name', sprintf('%s u%03d', srcFile,u));
-            saveFigTriplet(0, sprintf('%s   %.2f  (=unit#.PeakChan#)', srcFile, spk.id(u)), [0,1,0,0,0], sprintf('wfFigs_kilosorted%s%s',filesep,srcFile));
+            saveFigTriplet(0, sprintf('%s   %.2f  (=unit#.PeakChan#), [%s]', srcFile, spk.id(u), spk.sortId{u,2}), [0,1,0,0,0], sprintf('wfFigs_kilosorted%s%s',filesep,srcFile));
         end
         % close all wf plot figs
         close([wfFigs{:}])
@@ -333,7 +333,7 @@ end %main function
 
 
 %% sortByDepth
-function [tsIdx, depthEst, depthOrder] = sortByDepth(tsIdx, kilopath, chanMap)
+function [tsIdx, depthEst, depthOrder] = sortByDepth(tsIdx, kilopath, chanMap, doPlots)
 %  Currently [tsIdx] & [depthEst] outputs are both presorted
 %  	-Unsure if makes most sense to pass out:
 %       index & depths(original)
@@ -341,12 +341,17 @@ function [tsIdx, depthEst, depthOrder] = sortByDepth(tsIdx, kilopath, chanMap)
 %       tsIdx(sorted) & depths(sorted) & index
 % 
 
+if nargin<4 || isempty(doPlots)
+    doPlots = true;
+end
+
 % compile params struct for waveform extraction
 %clear pars
 pars.nWf = 2000;                   % Number of waveforms per unit to pull out
 pars.dataDir = kilopath;           % KiloSort/Phy output folder
 pars.trodality = 1;% + contains(lower(spk.info.comment), 'stereo');
 % pars.chDepth = spk.info.chanMap.ycoords;
+pars.plotSnr = doPlots;
 
 % % Most pars values have defaults best set in the loading function, but could be set manually
 % pars.wfWin = [-40 41];             % Number of samples before and after spiketime to include in waveform
